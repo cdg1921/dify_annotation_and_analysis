@@ -47,7 +47,7 @@ class RemoteSettingsSourceFactory(PydanticBaseSettingsSource):
 
         return d
 
-
+# cdg:定义一个配置 DifyConfig，用于集中管理DIFY的各种配置
 class DifyConfig(
     # Packaging info
     PackagingInfo,
@@ -65,6 +65,7 @@ class DifyConfig(
     # **Before using, please contact business@dify.ai by email to inquire about licensing matters.**
     EnterpriseFeatureConfig,
 ):
+    # cdg:定义类属性model_config，其值为SettingsConfigDict的实例。这个配置字典用于指定如何读取配置文件（如 .env 文件），并设置一些属性：
     model_config = SettingsConfigDict(
         # read from dotenv format config file
         env_file=".env",
