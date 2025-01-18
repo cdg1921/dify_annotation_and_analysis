@@ -2,7 +2,8 @@ import os
 import sys
 
 # cdg:整个API服务入口代码
-# cdg:源码启动API示例：flask run --host 0.0.0.0 --port=5001 --debug
+# cdg:源码启动API示例：poetry run python -m flask run --host 0.0.0.0 --port=5001 --debug
+# cdg:源码启动API示例（旧版本）：flask run --host 0.0.0.0 --port=5001 --debug
 # cdg:思考：为什么DIFY官方选择用Flask作为后端API框架，而不选择性能更加的Fast API?
 # cdg:继续思考：为什么DIFY官方选择用python作为后端开发语言，而不选择Java或Go?
 def is_db_command():
