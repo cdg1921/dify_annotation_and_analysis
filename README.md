@@ -1,5 +1,5 @@
 
-本项目为开源项目DIFY源码注释与解析（[源码链接](https://github.com/langgenius/dify/)），以帮助更多的同学学习和理解DIFY源码，以便更快进行二次开发和优化。
+本项目为开源项目DIFY源码注释与解析（[源码链接](https://github.com/langgenius/dify/)），以帮助更多的同学学习和理解DIFY源码，以便更快地进行二次开发和优化。
 
 源码版本为0.15.3版本。
 
