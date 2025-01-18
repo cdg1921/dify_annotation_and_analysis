@@ -49,7 +49,11 @@ else:
 
     from app_factory import create_app
 
+    # cdg:创建APP应用
     app = create_app()
+    # cdg:从app的extensions属性中获取名为"celery"的扩展，并将其赋值给变量celery。
+    # 在Flask中，extensions是一个字典，用于存储与应用相关的扩展（如Celery、SQLAlchemy 等）,
+    # 通过这种方式，可以方便地访问和使用与Flask应用集成的Celery实例，以便进行异步任务处理。
     celery = app.extensions["celery"]
 
 if __name__ == "__main__":

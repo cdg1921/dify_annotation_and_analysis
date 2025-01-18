@@ -13,6 +13,10 @@ def create_flask_app_with_configs() -> DifyApp:
     create a raw flask app
     with configs loaded from .env file
     """
+    # cdg:DifyApp是一个继承自flask.Flask的新类。
+    # 通过继承，DifyApp类拥有了Flask类的所有功能和特性。
+    # 此时，DifyApp可以用于创建Flask应用程序的实例，并可以在其中添加自定义的功能或方法。
+    # 通常用的都是app = Flask(__name__)，这里只是特别指定为DIFY相关的APP而已，名称是可以自定义的
     dify_app = DifyApp(__name__)
     dify_app.config.from_mapping(dify_config.model_dump())
 
