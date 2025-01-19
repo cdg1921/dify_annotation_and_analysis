@@ -74,11 +74,13 @@ class ExternalDataFetch:
         :param query: query
         :return:
         """
+        # cdg:查询外部数据工具信息
         with flask_app.app_context():
-            tool_variable = external_data_tool.variable
-            tool_type = external_data_tool.type
-            tool_config = external_data_tool.config
+            tool_variable = external_data_tool.variable  # cdg:外部数据工具输入变量
+            tool_type = external_data_tool.type          # cdg:外部数据工具类型
+            tool_config = external_data_tool.config      # cdg:外部数据工具配置信息
 
+            # cdg:实例化ExternalDataToolFactory对象
             external_data_tool_factory = ExternalDataToolFactory(
                 name=tool_type, tenant_id=tenant_id, app_id=app_id, variable=tool_variable, config=tool_config
             )
