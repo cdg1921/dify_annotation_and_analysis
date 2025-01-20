@@ -126,6 +126,7 @@ class BaseAgentRunner(AppRunner):
         """
         Repack app generate entity
         """
+        # cdg:生成式实体（大模型）包装，实际上就是当提示词模板为空时，设置为空值
         if app_generate_entity.app_config.prompt_template.simple_prompt_template is None:
             app_generate_entity.app_config.prompt_template.simple_prompt_template = ""
 
@@ -281,6 +282,7 @@ class BaseAgentRunner(AppRunner):
         """
         Create agent thought
         """
+        # cdg:创建包含智能体思考内容的消息对象，并更新到数据库中
         thought = MessageAgentThought(
             message_id=message_id,
             message_chain_id=None,

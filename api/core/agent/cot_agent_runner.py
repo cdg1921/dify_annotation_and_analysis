@@ -23,13 +23,16 @@ from core.tools.tool.tool import Tool
 from core.tools.tool_engine import ToolEngine
 from models.model import Message
 
-
+# cdg:CotAgentRunner -> BaseAgentRunner -> AppRunner
 class CotAgentRunner(BaseAgentRunner, ABC):
-    _is_first_iteration = True
-    _ignore_observation_providers = ["wenxin"]
-    _historic_prompt_messages: list[PromptMessage] | None = None
+    _is_first_iteration = True                                     # cdg:是否首次迭代，默认为True
+    _ignore_observation_providers = ["wenxin"]                     # cdg:忽略文心一言模型
+    _historic_prompt_messages: list[PromptMessage] | None = None   # cdg:历史会话记录
+    # cdg:Agent Scratchpad（代理草稿板）是一个用于增强智能代理（如聊天机器人或自动化系统）功能的工具。
+    # Agent Scratchpad提供一个临时的存储空间，用于保存代理在处理任务时生成的中间结果、思路或数据,
+    # 使得代理能够在执行复杂任务时保持上下文。
     _agent_scratchpad: list[AgentScratchpadUnit] | None = None
-    _instruction: str = ""  # FIXME this must be str for now
+    _instruction: str = ""  # FIXME this must be str for now       # cdg:开场白
     _query: str | None = None
     _prompt_messages_tools: list[PromptMessageTool] = []
 
@@ -43,9 +46,11 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         Run Cot agent application
         """
         app_generate_entity = self.application_generate_entity
-        self._repack_app_generate_entity(app_generate_entity)
+        self._repack_app_generate_entity(app_generate_entity)  # cdg:生成式实体（大模型）包装，实际上就是当提示词模板为空时，设置为空值
+        # cdg:初始化COT状态
         self._init_react_state(query)
 
+        # cdg:任务跟踪器
         trace_manager = app_generate_entity.trace_manager
 
         # check model mode
@@ -61,6 +66,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         self._instruction = self._fill_in_inputs_from_external_data_tools(instruction=instruction or "", inputs=inputs)
 
         iteration_step = 1
+        # cdg:max_iteration_steps不小于6
         max_iteration_steps = min(app_config.agent.max_iteration if app_config.agent else 5, 5) + 1
 
         # convert tools into ModelRuntime Tool format
@@ -70,6 +76,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         llm_usage: dict[str, Optional[LLMUsage]] = {"usage": None}
         final_answer = ""
 
+        # cdg:计算已使用的token数量
         def increase_usage(final_llm_usage_dict: dict[str, Optional[LLMUsage]], usage: LLMUsage):
             if not final_llm_usage_dict["usage"]:
                 final_llm_usage_dict["usage"] = usage
@@ -85,27 +92,33 @@ class CotAgentRunner(BaseAgentRunner, ABC):
 
         while function_call_state and iteration_step <= max_iteration_steps:
             # continue to run until there is not any tool call
+            # cdg:在给定的steps内循环执行直至没有工具可以调用
             function_call_state = False
 
+            # cdg:最后一步进行总结，不再调用工具，否则就没有总结的步骤，直接输出工具调用的结果是不合适的
             if iteration_step == max_iteration_steps:
                 # the last iteration, remove all tools
                 self._prompt_messages_tools = []
 
             message_file_ids: list[str] = []
 
+            # cdg:创建包含智能体思考内容的消息对象，并更新到数据库中
             agent_thought = self.create_agent_thought(
                 message_id=message.id, message="", tool_name="", tool_input="", messages_ids=message_file_ids
             )
 
+            # cdg:Agent执行过程记录到消息队列中，中间过程为思考过程，Event类型为QueueAgentThoughtEvent
             if iteration_step > 1:
                 self.queue_manager.publish(
                     QueueAgentThoughtEvent(agent_thought_id=agent_thought.id), PublishFrom.APPLICATION_MANAGER
                 )
 
             # recalc llm max tokens
+            # cdg:更新提示词消息并重新计算可用的max_tokens
             prompt_messages = self._organize_prompt_messages()
             self.recalc_llm_max_tokens(self.model_config, prompt_messages)
             # invoke model
+            # cdg:调用大模型进行思考，并返回大模型生成的结果
             chunks = model_instance.invoke_llm(
                 prompt_messages=prompt_messages,
                 model_parameters=app_generate_entity.model_conf.parameters,
@@ -116,15 +129,22 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                 callbacks=[],
             )
 
+            # cdg:强制为流式输出，为什么不能是blocking输出？
             if not isinstance(chunks, Generator):
                 raise ValueError("Expected streaming response from LLM")
 
+            # cdg:通过检查返回结果是否为空，以判断大模型调用是否成功
             # check llm result
             if not chunks:
                 raise ValueError("failed to invoke llm")
 
+            # cdg:tokens使用情况初始化
             usage_dict: dict[str, Optional[LLMUsage]] = {"usage": None}
+
+            # cdg:大模型返回结果整理，返回结果为Markdown格式信息，可能包含多种不同格式内容，如代码、json等，
             react_chunks = CotAgentOutputParser.handle_react_stream_output(chunks, usage_dict)
+
+            # cdg:初始化一个AgentScratchpadUnit对象
             scratchpad = AgentScratchpadUnit(
                 agent_response="",
                 thought="",
@@ -351,6 +371,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         """
         init agent scratchpad
         """
+        # cdg:初始化agent scratchpad。agent scratchpad与常见LLM scratchpad的区别
         self._query = query
         self._agent_scratchpad = []
         self._historic_prompt_messages = self._organize_historic_prompt_messages()
