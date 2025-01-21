@@ -13,12 +13,13 @@ from core.model_runtime.entities import (
 from core.model_runtime.entities.message_entities import ImagePromptMessageContent
 from core.model_runtime.utils.encoders import jsonable_encoder
 
-
+# cdg:CotChatAgentRunner -> CotAgentRunner -> BaseAgentRunner -> AppRunner
 class CotChatAgentRunner(CotAgentRunner):
     def _organize_system_prompt(self) -> SystemPromptMessage:
         """
         Organize system prompt
         """
+        # cdg:格式化系统提示词
         if not self.app_config.agent:
             raise ValueError("Agent configuration is not set")
 
@@ -39,6 +40,7 @@ class CotChatAgentRunner(CotAgentRunner):
         """
         Organize user query
         """
+        # cdg:格式化用户提示词，注意需要考虑是否存在文件的情况，如果存在，则需要将文件内容作为用户提示词的一部分
         if self.files:
             prompt_message_contents: list[PromptMessageContent] = []
             prompt_message_contents.append(TextPromptMessageContent(data=query))
@@ -53,8 +55,10 @@ class CotChatAgentRunner(CotAgentRunner):
                 else None
             )
             image_detail_config = image_detail_config or ImagePromptMessageContent.DETAIL.LOW
+            # cdg:对于每一个文件（图片）
             for file in self.files:
                 prompt_message_contents.append(
+                    # cdg:将文件内容，同时记录文件类型、URL、扩展名等信息
                     file_manager.to_prompt_message_content(
                         file,
                         image_detail_config=image_detail_config,

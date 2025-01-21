@@ -56,6 +56,7 @@ def to_prompt_message_content(
     if f.type == FileType.IMAGE:
         params["detail"] = image_detail_config or ImagePromptMessageContent.DETAIL.LOW
 
+    # cdg:支持图像、音频、视频、文件等格式，每一种格式都有专门的提示词格式
     prompt_class_map: Mapping[FileType, type[MultiModalPromptMessageContent]] = {
         FileType.IMAGE: ImagePromptMessageContent,
         FileType.AUDIO: AudioPromptMessageContent,

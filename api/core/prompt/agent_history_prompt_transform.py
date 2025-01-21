@@ -41,6 +41,7 @@ class AgentHistoryPromptTransform(PromptTransform):
         if not self.memory:
             return prompt_messages
 
+        # cdg:模型所支持的上下文长度-max_tokens-当前的提示词长度，剩下的才放历史消息
         max_token_limit = self._calculate_rest_token(self.prompt_messages, self.model_config)
 
         model_type_instance = self.model_config.provider_model_bundle.model_type_instance
@@ -56,6 +57,7 @@ class AgentHistoryPromptTransform(PromptTransform):
         num_prompt = 0
         # append prompt messages in desc order
         for prompt_message in self.history_messages[::-1]:
+            # cdg:忽略系统提示词
             if isinstance(prompt_message, SystemPromptMessage):
                 continue
             prompt_messages.append(prompt_message)

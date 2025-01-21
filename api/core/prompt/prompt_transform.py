@@ -16,8 +16,11 @@ class PromptTransform:
         prompt_messages: list[PromptMessage],
         model_config: ModelConfigWithCredentialsEntity,
     ) -> list[PromptMessage]:
+        # cdg:计算可以存放历史消息的token长度
         rest_tokens = self._calculate_rest_token(prompt_messages, model_config)
+        # cdg:根据指定的token长度获取历史消息
         histories = self._get_history_messages_list_from_memory(memory, memory_config, rest_tokens)
+        # 将历史消息添加到当前提示词中
         prompt_messages.extend(histories)
 
         return prompt_messages
@@ -25,6 +28,7 @@ class PromptTransform:
     def _calculate_rest_token(
         self, prompt_messages: list[PromptMessage], model_config: ModelConfigWithCredentialsEntity
     ) -> int:
+        # cdg:模型所支持的上下文长度-max_tokens-当前的提示词长度，剩下可用的token长度
         rest_tokens = 2000
 
         model_context_tokens = model_config.model_schema.model_properties.get(ModelPropertyKey.CONTEXT_SIZE)

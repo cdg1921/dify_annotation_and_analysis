@@ -144,10 +144,12 @@ class TokenBufferMemory:
         :param message_limit: message limit
         :return:
         """
+        # cdg:根据指定长度将历史消息转为文本
         prompt_messages = self.get_history_prompt_messages(max_token_limit=max_token_limit, message_limit=message_limit)
 
         string_messages = []
         for m in prompt_messages:
+            # cdg:仅将UserPromptMessage和AssistantPromptMessage添加到历史消息中，忽略SystemPromptMessage等消息
             if m.role == PromptMessageRole.USER:
                 role = human_prefix
             elif m.role == PromptMessageRole.ASSISTANT:
