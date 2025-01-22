@@ -234,6 +234,7 @@ class Tool(BaseModel, ABC):
         """
         Transform tool parameters type
         """
+        # cdg:转为系统指定的参数类型，传过来的参数可能是大模型生成，数据类型不一定准确。
         # Temp fix for the issue that the tool parameters will be converted to empty while validating the credentials
         result: dict[str, Any] = deepcopy(dict(tool_parameters))
         for parameter in self.parameters or []:
@@ -276,6 +277,7 @@ class Tool(BaseModel, ABC):
 
         :return: all runtime parameters
         """
+        # cdg:系统默认配置与用户指定配置融合，如果两者不一致，以用户指定配置为准
         parameters = self.parameters or []
         parameters = parameters.copy()
         user_parameters = self.get_runtime_parameters()

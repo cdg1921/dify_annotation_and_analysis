@@ -241,7 +241,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                         message_file_ids=message_file_ids,
                         trace_manager=trace_manager,
                     )
-                    # 将工具调用返回的结果作为智能体观察的内容，同时作为智能体的输出
+                    # cdg:将工具调用返回的结果作为智能体观察的内容，同时作为智能体的输出
                     scratchpad.observation = tool_invoke_response
                     scratchpad.agent_response = tool_invoke_response
 
@@ -321,7 +321,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         :return: observation, meta
         """
         # action is tool call, invoke tool
-        # cdg:执行Action，即调用工具
+        # cdg:调用工具执行Action
         tool_call_name = action.action_name
         tool_call_args = action.action_input
         tool_instance = tool_instances.get(tool_call_name)
