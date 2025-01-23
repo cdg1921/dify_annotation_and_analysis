@@ -12,9 +12,10 @@ class AgentConfigManager:
 
         :param config: model config args
         """
+        # cdg:从模型配置中创建智能体实体
         if "agent_mode" in config and config["agent_mode"] and "enabled" in config["agent_mode"]:
             agent_dict = config.get("agent_mode", {})
-            agent_strategy = agent_dict.get("strategy", "cot")
+            agent_strategy = agent_dict.get("strategy", "cot") # cdg:智能体策略默认为cot
 
             if agent_strategy == "function_call":
                 strategy = AgentEntity.Strategy.FUNCTION_CALLING
@@ -22,6 +23,7 @@ class AgentConfigManager:
                 strategy = AgentEntity.Strategy.CHAIN_OF_THOUGHT
             else:
                 # old configs, try to detect default strategy
+                # cdg:如果未指定策略，则根据模型供应商而定，openai的模型用Function Calling，其他厂商用COT
                 if config["model"]["provider"] == "openai":
                     strategy = AgentEntity.Strategy.FUNCTION_CALLING
                 else:

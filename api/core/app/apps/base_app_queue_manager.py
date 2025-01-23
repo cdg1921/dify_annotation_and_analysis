@@ -23,7 +23,7 @@ class PublishFrom(Enum):
     APPLICATION_MANAGER = 1
     TASK_PIPELINE = 2
 
-
+# cdg:应用消息管理器
 class AppQueueManager:
     def __init__(self, task_id: str, user_id: str, invoke_from: InvokeFrom) -> None:
         if not user_id:

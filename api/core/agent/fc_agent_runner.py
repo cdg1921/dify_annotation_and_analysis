@@ -30,7 +30,7 @@ from models.model import Message
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:FunctionCallAgentRunner -> BaseAgentRunner -> AppRunner
 class FunctionCallAgentRunner(BaseAgentRunner):
     def run(self, message: Message, query: str, **kwargs: Any) -> Generator[LLMResultChunk, None, None]:
         """
@@ -73,11 +73,13 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         while function_call_state and iteration_step <= max_iteration_steps:
             function_call_state = False
 
+            # cdg:最后一次迭代不需要调用工具
             if iteration_step == max_iteration_steps:
                 # the last iteration, remove all tools
                 prompt_messages_tools = []
 
             message_file_ids: list[str] = []
+            # cdg:创建agent_thought实例
             agent_thought = self.create_agent_thought(
                 message_id=message.id, message="", tool_name="", tool_input="", messages_ids=message_file_ids
             )
@@ -344,6 +346,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         Returns:
             List[Tuple[str, str, Dict[str, Any]]]: [(tool_call_id, tool_call_name, tool_call_args)]
         """
+        # cdg:从大模型输出结果（即智能体思考结果）中抽取函数名称和参数，针对流式模式
         tool_calls = []
         for prompt_message in llm_result_chunk.delta.message.tool_calls:
             args = {}
@@ -367,6 +370,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         Returns:
             List[Tuple[str, str, Dict[str, Any]]]: [(tool_call_id, tool_call_name, tool_call_args)]
         """
+        # cdg:从大模型输出结果（即智能体思考结果）中抽取函数名称和参数，针对阻塞模式。阻塞模式和流式结果格式不一样，tool_calls存放的位置也不一样
         tool_calls = []
         for prompt_message in llm_result.message.tool_calls:
             args = {}
@@ -389,11 +393,15 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         """
         Initialize system message
         """
+        # cdg:初始化系统提示词，如果history_prompt_messages为空，则直接返回prompt_template，
+        # 否则检查prompt_messages中第一条是否为系统提示词，如果不是，则在prompt_messages第一条的位置插入系统提示词并返回prompt_messages，
+        # 实际上prompt_messages是history_prompt_messages
         if not prompt_messages and prompt_template:
             return [
                 SystemPromptMessage(content=prompt_template),
             ]
 
+        # cdg:如果第一条Prompt不是系统Prompt，则构建系统Prompt并插入第一位置
         if prompt_messages and not isinstance(prompt_messages[0], SystemPromptMessage) and prompt_template:
             prompt_messages.insert(0, SystemPromptMessage(content=prompt_template))
 
@@ -403,6 +411,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         """
         Organize user query
         """
+        # cdg:主要检查是否存在文件（特别是图片），将文件内容放在提示词中（仅针对第一个迭代，后续每个迭代中文件内容用“image”或者“file”进行标识）
         if self.files:
             prompt_message_contents: list[PromptMessageContent] = []
             prompt_message_contents.append(TextPromptMessageContent(data=query))
@@ -418,6 +427,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
             )
             image_detail_config = image_detail_config or ImagePromptMessageContent.DETAIL.LOW
             for file in self.files:
+                # cdg:抽取文件内容，同时记录文件类型、URL、扩展名等信息
                 prompt_message_contents.append(
                     file_manager.to_prompt_message_content(
                         file,
@@ -425,6 +435,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                     )
                 )
 
+            # cdg:将文件内容放到UserPromptMessage中
             prompt_messages.append(UserPromptMessage(content=prompt_message_contents))
         else:
             prompt_messages.append(UserPromptMessage(content=query))
@@ -451,12 +462,25 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                             for content in prompt_message.content
                         ]
                     )
+                    # cdg:上述两个if的逻辑如下
+                    """
+                    if content.type == PromptMessageContentType.TEXT:
+                        content.data
+                    else:
+                        if content.type == PromptMessageContentType.IMAGE:
+                            "[image]"
+                        else:
+                            "[file]"
+                    """
 
         return prompt_messages
 
     def _organize_prompt_messages(self):
         prompt_template = self.app_config.prompt_template.simple_prompt_template or ""
+        # cdg:初始化系统提示词，如果history_prompt_messages为空，则直接返回prompt_template，
+        # 否则检查history_prompt_messages中第一条是否为系统提示词，如果不是，则在history_prompt_messages第一条的位置插入系统提示词并返回history_prompt_messages
         self.history_prompt_messages = self._init_system_message(prompt_template, self.history_prompt_messages)
+        # cdg: 构建用户提示词，主要检查和处理文件类型数据
         query_prompt_messages = self._organize_user_query(self.query or "", [])
 
         self.history_prompt_messages = AgentHistoryPromptTransform(

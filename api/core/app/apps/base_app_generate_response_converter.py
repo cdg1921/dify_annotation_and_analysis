@@ -8,7 +8,14 @@ from core.app.entities.task_entities import AppBlockingResponse, AppStreamRespon
 from core.errors.error import ModelCurrentlyNotSupportError, ProviderTokenNotInitError, QuotaExceededError
 from core.model_runtime.errors.invoke import InvokeError
 
-
+# cdg:[
+#     AdvancedChatAppGenerateResponseConverter、
+#     AgentChatAppGenerateResponseConverter、
+#     ChatAppGenerateResponseConverter、
+#     CompletionAppGenerateResponseConverter、
+#     WorkflowAppGenerateResponseConverter
+# ]
+# -> AppGenerateResponseConverter
 class AppGenerateResponseConverter(ABC):
     _blocking_response_type: type[AppBlockingResponse]
 

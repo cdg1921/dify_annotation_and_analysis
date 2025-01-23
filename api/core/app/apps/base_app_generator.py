@@ -19,10 +19,12 @@ class BaseAppGenerator:
     ) -> Mapping[str, Any]:
         user_inputs = user_inputs or {}
         # Filter input variables from form configuration, handle required fields, default values, and option values
+        # cdg:对每个变量进行格式检查
         user_inputs = {
             var.variable: self._validate_inputs(value=user_inputs.get(var.variable), variable_entity=var)
             for var in variables
         }
+        # cdg:删除value中的空字符串
         user_inputs = {k: self._sanitize_value(v) for k, v in user_inputs.items()}
         # Convert files in inputs to File
         entity_dictionary = {item.variable: item for item in variables}
@@ -135,6 +137,7 @@ class BaseAppGenerator:
         return value
 
     def _sanitize_value(self, value: Any) -> Any:
+        # cdg:删除空字符串
         if isinstance(value, str):
             return value.replace("\x00", "")
         return value

@@ -144,6 +144,7 @@ class BaseAgentRunner(AppRunner):
         )
         tool_entity.load_variables(self.variables_pool)
 
+        # cdg:构建PromptMessageTool对象
         message_tool = PromptMessageTool(
             name=tool.tool_name,
             description=tool_entity.description.llm if tool_entity.description else "",
@@ -154,6 +155,7 @@ class BaseAgentRunner(AppRunner):
             },
         )
 
+        # cdg:从tool_entity中抽取参数填充到PromptMessageTool对象中
         parameters = tool_entity.get_all_runtime_parameters()
         for parameter in parameters:
             if parameter.form != ToolParameter.ToolParameterForm.LLM:
@@ -187,6 +189,7 @@ class BaseAgentRunner(AppRunner):
         """
         convert dataset retriever tool to prompt message tool
         """
+        # cdg:构建PromptMessageTool对象
         prompt_tool = PromptMessageTool(
             name=tool.identity.name if tool.identity else "unknown",
             description=tool.description.llm if tool.description else "",
@@ -197,6 +200,7 @@ class BaseAgentRunner(AppRunner):
             },
         )
 
+        # cdg:从tool_entity中抽取参数填充到PromptMessageTool对象中
         for parameter in tool.get_runtime_parameters():
             parameter_type = "string"
 
@@ -439,6 +443,8 @@ class BaseAgentRunner(AppRunner):
         for prompt_message in prompt_messages:
             if isinstance(prompt_message, SystemPromptMessage):
                 result.append(prompt_message)
+            # cdg:此处可有break，可有可无，正常情况下系统提示词最多一条
+
 
         messages: list[Message] = (
             db.session.query(Message)
@@ -452,7 +458,7 @@ class BaseAgentRunner(AppRunner):
         messages = list(reversed(extract_thread_messages(messages)))
 
         for message in messages:
-            if message.id == self.message.id:
+            if message.id == self.message.id: # cdg:跳过当前消息
                 continue
 
             result.append(self.organize_agent_user_prompt(message))

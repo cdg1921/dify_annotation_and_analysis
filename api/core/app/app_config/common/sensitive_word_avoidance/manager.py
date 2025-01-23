@@ -3,10 +3,11 @@ from typing import Optional
 from core.app.app_config.entities import SensitiveWordAvoidanceEntity
 from core.moderation.factory import ModerationFactory
 
-
+# cdg:敏感词检测器
 class SensitiveWordAvoidanceConfigManager:
     @classmethod
     def convert(cls, config: dict) -> Optional[SensitiveWordAvoidanceEntity]:
+        # cdg:敏感词典
         sensitive_word_avoidance_dict = config.get("sensitive_word_avoidance")
         if not sensitive_word_avoidance_dict:
             return None

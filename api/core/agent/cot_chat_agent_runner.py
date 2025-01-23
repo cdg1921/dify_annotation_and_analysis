@@ -58,7 +58,7 @@ class CotChatAgentRunner(CotAgentRunner):
             # cdg:对于每一个文件（图片）
             for file in self.files:
                 prompt_message_contents.append(
-                    # cdg:将文件内容，同时记录文件类型、URL、扩展名等信息
+                    # cdg:抽取文件内容，同时记录文件类型、URL、扩展名等信息
                     file_manager.to_prompt_message_content(
                         file,
                         image_detail_config=image_detail_config,
