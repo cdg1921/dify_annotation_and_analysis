@@ -13,6 +13,8 @@ class ModelProvider(ABC):
     provider_schema: Optional[ProviderEntity] = None
     model_instance_map: dict[str, AIModel] = {}
 
+    # cdg:AIModel -> AIModelEntity(模型参数) -> ProviderModel(模型名称、特性、配置等)
+
     @abstractmethod
     def validate_provider_credentials(self, credentials: dict) -> None:
         """
@@ -32,9 +34,11 @@ class ModelProvider(ABC):
 
         :return: provider schema
         """
+        # cdg:如果不为空，则直接返回，否则从指定的yaml文件中解析
         if self.provider_schema:
             return self.provider_schema
 
+        # cdg:获取当前对象所属类的模块名称的最后一部分抽取供应商名称
         # get dirname of the current path
         provider_name = self.__class__.__module__.split(".")[-1]
 
@@ -65,12 +69,15 @@ class ModelProvider(ABC):
         :return: list of models
         """
         provider_schema = self.get_provider_schema()
+        # cdg:模型类型检查
         if model_type not in provider_schema.supported_model_types:
             return []
 
+        # cdg:根据模型类型获取模型实例李彪
         # get model instance of the model type
         model_instance = self.get_model_instance(model_type)
 
+        # cdg:预定义模型列表
         # get predefined models (predefined_models)
         models = model_instance.predefined_models()
 
@@ -84,12 +91,15 @@ class ModelProvider(ABC):
         :param model_type: model type defined in `ModelType`
         :return:
         """
+        # cdg:获取当前对象所属类的模块名称的最后一部分作为供应商名称
         # get dirname of the current path
         provider_name = self.__class__.__module__.split(".")[-1]
 
+        # cdg：model_instance_map的键值是供应商名称+类型，Key是AIModel，包括model_type、AIModelEntity列表等
         if f"{provider_name}.{model_type.value}" in self.model_instance_map:
             return self.model_instance_map[f"{provider_name}.{model_type.value}"]
 
+        # cdg:获取当前python脚本文件路径，../api/core/model_runtime/model_providers/__base/model_provider.py
         # get the path of the model type classes
         base_path = os.path.abspath(__file__)
         model_type_name = model_type.value.replace("-", "_")
@@ -99,6 +109,7 @@ class ModelProvider(ABC):
         if not os.path.isdir(model_type_path) or not os.path.exists(model_type_py_path):
             raise Exception(f"Invalid model type {model_type} for provider {provider_name}")
 
+        # cdg:对象所属类的模块的父模块
         # Dynamic loading {model_type_name}.py file and find the subclass of AIModel
         parent_module = ".".join(self.__class__.__module__.split(".")[:-1])
         mod = import_module_from_source(

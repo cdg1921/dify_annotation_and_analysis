@@ -21,7 +21,9 @@ from core.model_runtime.errors.invoke import InvokeAuthorizationError, InvokeErr
 from core.model_runtime.model_providers.__base.tokenizers.gpt2_tokenzier import GPT2Tokenizer
 from core.tools.utils.yaml_utils import load_yaml_file
 
-
+# cdg:AIModel(添加模型类型、鉴权信息) -> AIModelEntity(添加模型参数) -> ProviderModel(模型名称、特性、配置等)
+# 继承关系：[LargeLanguageModel、ModerationModel、RerankModel、Speech2TextModel、TextEmbeddingModel、
+#          Text2ImageModel、TTSModel] -> AIModel
 class AIModel(ABC):
     """
     Base class for all models.
@@ -138,19 +140,25 @@ class AIModel(ABC):
 
         model_schemas = []
 
+        # cdg:获取当前模块名称
         # get module name
         model_type = self.__class__.__module__.split(".")[-1]
 
+        # 获取供应商名称
         # get provider name
         provider_name = self.__class__.__module__.split(".")[-3]
 
+        # cdg:获取当前python脚本绝对路径,../api/core/model_runtime/model_providers/__base/ai_model.py
         # get the path of current classes
         current_path = os.path.abspath(__file__)
+        # cdg:供应商模型文件路径
         # get parent path of the current path
         provider_model_type_path = os.path.join(
-            os.path.dirname(os.path.dirname(current_path)), provider_name, model_type
+            os.path.dirname(os.path.dirname(current_path)),  # cdg:current_path的上两级路径
+            provider_name, model_type
         )
 
+        # 当前供应商下指定类型（如llm、Embedding）的模型的yaml文件
         # get all yaml files path under provider_model_type_path that do not start with __
         model_schema_yaml_paths = [
             os.path.join(provider_model_type_path, model_schema_yaml)
@@ -161,9 +169,11 @@ class AIModel(ABC):
             and model_schema_yaml.endswith(".yaml")
         ]
 
+        # cdg:_position.yaml中读取各模型的位置
         # get _position.yaml file path
         position_map = get_position_map(provider_model_type_path)
 
+        # cdg:遍历所有模型的yaml文件，注意，此时model_type已指定（类对象实例化的时候已经确定了model_type）,此时只有一种模型类型
         # traverse all model_schema_yaml_paths
         for model_schema_yaml_path in model_schema_yaml_paths:
             # read yaml data from yaml file
@@ -205,6 +215,7 @@ class AIModel(ABC):
             # cache model schema
             model_schemas.append(model_schema)
 
+        # cdg:根据_position.yaml中指定的模型位置对各模型的model_schema进行排序
         # resort model schemas by position
         model_schemas = sort_by_position_map(position_map, model_schemas, lambda x: x.model)
 
@@ -224,11 +235,13 @@ class AIModel(ABC):
         # get predefined models (predefined_models)
         models = self.predefined_models()
 
+        # cdg:根据模型名称在从预定义供应商中找相应的模型信息，如果找到则直接返回，如果找不到则根据名称和鉴权信息读取自定义模型的model_schema
         model_map = {model.model: model for model in models}
         if model in model_map:
             return model_map[model]
 
         if credentials:
+            # cdg:根据模型名称和鉴权信息读取模型model_schema
             model_schema = self.get_customizable_model_schema_from_credentials(model, credentials)
             if model_schema:
                 return model_schema

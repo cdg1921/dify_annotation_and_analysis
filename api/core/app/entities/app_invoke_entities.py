@@ -11,7 +11,7 @@ from core.file import File, FileUploadConfig
 from core.model_runtime.entities.model_entities import AIModelEntity
 from core.ops.ops_trace_manager import TraceQueueManager
 
-
+# cdg:想要了解DIFY代码的实现过程，首先得了解相关的实体信息（Entity），实体类似于看一本小说，首先得熟悉小说中的角色
 class InvokeFrom(Enum):
     """
     Invoke From.
@@ -67,6 +67,7 @@ class ModelConfigWithCredentialsEntity(BaseModel):
     parameters: dict[str, Any] = {}
     stop: list[str] = []
 
+    # cdg:pydantic类型的配置字典，保护空间为空，一般场景下当作一个普通字典即可
     # pydantic configs
     model_config = ConfigDict(protected_namespaces=())
 

@@ -34,7 +34,7 @@ from services.errors.conversation import ConversationCompletedError, Conversatio
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:MessageBasedAppGenerator -> BaseAppGenerator
 class MessageBasedAppGenerator(BaseAppGenerator):
     def _handle_response(
         self,
@@ -65,6 +65,7 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :return:
         """
         # init generate task pipeline
+        # cdg:初始化任务pipeline
         generate_task_pipeline = EasyUIBasedGenerateTaskPipeline(
             application_generate_entity=application_generate_entity,
             queue_manager=queue_manager,

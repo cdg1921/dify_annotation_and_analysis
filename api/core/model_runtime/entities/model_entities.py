@@ -73,8 +73,8 @@ class FetchFrom(Enum):
     Enum class for fetch from.
     """
 
-    PREDEFINED_MODEL = "predefined-model"
-    CUSTOMIZABLE_MODEL = "customizable-model"
+    PREDEFINED_MODEL = "predefined-model"         # cdg:预定义（内置）模型
+    CUSTOMIZABLE_MODEL = "customizable-model"     # cdg:用户自定义模型
 
 
 class ModelFeature(Enum):
@@ -100,8 +100,21 @@ class DefaultParameterName(StrEnum):
     TEMPERATURE = "temperature"
     TOP_P = "top_p"
     TOP_K = "top_k"
+    # cdg:Presence Penalty（存在惩罚,取值范围：-2.0到2.0，默认为0）, 用于惩罚在生成文本中已经出现过的词汇。
+    # 其目的是鼓励模型在生成过程中引入新的词汇或概念，避免重复。
+    # 当presence_penalty的值增加时，模型会更倾向于使用尚未出现过的词汇，有助于提高生成文本的多样性和新颖性。
+    # 适用于需要生成多样化内容的场景，例如创作、故事生成等。
     PRESENCE_PENALTY = "presence_penalty"
+    # cdg:Frequency Penalty（频率惩罚,取值范围：-2.0到2.0，默认为0）,用于惩罚在生成文本中频繁出现的词汇。
+    # 其目的是减少某些词汇的重复使用，尤其是那些在上下文中已经多次出现的词汇。
+    # 当frequency_penalty的值增加时，模型会对已经出现过多次的词汇施加更大的惩罚，从而降低它们在后续生成中的出现概率，有助于避免生成文本中的冗余和重复。
     FREQUENCY_PENALTY = "frequency_penalty"
+    # cdg:对比：
+    # （1）presence_penalty关注的是词汇是否出现过（即是否存在），而frequency_penalty关注的是词汇出现的频率（即出现次数）。
+    # （2）presence_penalty主要鼓励引入新词汇，而frequency_penalty则主要减少常用词汇的重复使用。
+    # （3）presence_penalty更加关注文本的多样性，而frequency_penalty更加关注文本的流畅性和可读性。
+
+    # cdg:max_tokens是模型输出的token长度，不包含输入
     MAX_TOKENS = "max_tokens"
     RESPONSE_FORMAT = "response_format"
     JSON_SCHEMA = "json_schema"
@@ -150,21 +163,23 @@ class ModelPropertyKey(Enum):
     MAX_WORKERS = "max_workers"
 
 
+# 供应商模型结构体
 class ProviderModel(BaseModel):
     """
     Model class for provider model.
     """
 
     model: str
-    label: I18nObject
-    model_type: ModelType
-    features: Optional[list[ModelFeature]] = None
+    label: I18nObject                                       # cdg:模型标识，用于展示，I18nObject支持便于切换系统语言
+    model_type: ModelType                                   # cdg:LLM、Embedding、Reranker等
+    features: Optional[list[ModelFeature]] = None           # cdg:模型特性，是否支持智能体、工具调用、视觉、语音等
     fetch_from: FetchFrom
     model_properties: dict[ModelPropertyKey, Any]
-    deprecated: bool = False
+    deprecated: bool = False                                # cdg:是否废弃（不能使用）
     model_config = ConfigDict(protected_namespaces=())
 
 
+# cdg:参数结构体
 class ParameterRule(BaseModel):
     """
     Model class for parameter rule.
@@ -198,9 +213,9 @@ class AIModelEntity(ProviderModel):
     """
     Model class for AI model.
     """
-
-    parameter_rules: list[ParameterRule] = []
-    pricing: Optional[PriceConfig] = None
+    # cdg:AIModelEntity包含模型的各种参数信息及其计费方式
+    parameter_rules: list[ParameterRule] = []   # cdg:参数结构列表
+    pricing: Optional[PriceConfig] = None       # cdg:计费方式
 
 
 class ModelUsage(BaseModel):

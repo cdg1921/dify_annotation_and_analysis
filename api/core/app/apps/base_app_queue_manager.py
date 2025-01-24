@@ -157,6 +157,7 @@ class AppQueueManager:
         return f"generate_task_stopped:{task_id}"
 
     def _check_for_sqlalchemy_models(self, data: Any):
+        # cdg:迭代检查每一个元素值（包括自动或列表中的元素值）是否为DeclarativeMeta实例或者有_sa_instance_state属性
         # from entity to dict or list
         if isinstance(data, dict):
             for key, value in data.items():

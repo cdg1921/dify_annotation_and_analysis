@@ -62,7 +62,7 @@ from models.model import AppMode, Conversation, Message, MessageAgentThought
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:EasyUIBasedGenerateTaskPipeline针对Chat、Completion和AgentChat等场景，不包含workflow
 class EasyUIBasedGenerateTaskPipeline(BasedGenerateTaskPipeline, MessageCycleManage):
     """
     EasyUIBasedGenerateTaskPipeline is a class that generate stream output and state management for Application.

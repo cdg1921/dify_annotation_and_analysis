@@ -14,11 +14,11 @@ class ModelConfigEntity(BaseModel):
     Model Config Entity.
     """
 
-    provider: str
-    model: str
-    mode: Optional[str] = None
-    parameters: dict[str, Any] = {}
-    stop: list[str] = []
+    provider: str                     # cdg:供应商
+    model: str                        # cdg:模型名称
+    mode: Optional[str] = None        # cdg:模型模式：chat或completion
+    parameters: dict[str, Any] = {}   # cdg:模型参数，如max_tokens、top K、Top P、温度等
+    stop: list[str] = []              # cdg:停止标识
 
 
 class AdvancedChatMessageEntity(BaseModel):
@@ -26,8 +26,8 @@ class AdvancedChatMessageEntity(BaseModel):
     Advanced Chat Message Entity.
     """
 
-    text: str
-    role: PromptMessageRole
+    text: str                  # cdg:消息内容
+    role: PromptMessageRole    # cdg:角色，如system、user、assistant、tool等
 
 
 class AdvancedChatPromptTemplateEntity(BaseModel):
@@ -35,7 +35,7 @@ class AdvancedChatPromptTemplateEntity(BaseModel):
     Advanced Chat Prompt Template Entity.
     """
 
-    messages: list[AdvancedChatMessageEntity]
+    messages: list[AdvancedChatMessageEntity]   # cdg:由多个AdvancedChatMessageEntity构成的消息列表
 
 
 class AdvancedCompletionPromptTemplateEntity(BaseModel):
@@ -47,7 +47,7 @@ class AdvancedCompletionPromptTemplateEntity(BaseModel):
         """
         Role Prefix Entity.
         """
-
+        # cdg:Completion模式下的角色只有user和assistant
         user: str
         assistant: str
 
@@ -83,7 +83,7 @@ class PromptTemplateEntity(BaseModel):
             raise ValueError(f"invalid prompt type value {value}")
 
     prompt_type: PromptType
-    simple_prompt_template: Optional[str] = None
+    simple_prompt_template: Optional[str] = None   # cdg:Optional,可选，可有可无
     advanced_chat_prompt_template: Optional[AdvancedChatPromptTemplateEntity] = None
     advanced_completion_prompt_template: Optional[AdvancedCompletionPromptTemplateEntity] = None
 
@@ -146,8 +146,8 @@ class DatasetRetrieveConfigEntity(BaseModel):
         'single' or 'multiple'
         """
 
-        SINGLE = "single"
-        MULTIPLE = "multiple"
+        SINGLE = "single"       # cdg:仅召回单个知识库的内容
+        MULTIPLE = "multiple"   # cdg:同时召回多个知识库的内容
 
         @classmethod
         def value_of(cls, value: str):
@@ -186,7 +186,7 @@ class SensitiveWordAvoidanceEntity(BaseModel):
     """
     Sensitive Word Avoidance Entity.
     """
-
+    # cdg:敏感词字典
     type: str
     config: dict[str, Any] = {}
 
@@ -209,7 +209,7 @@ class TracingConfigEntity(BaseModel):
     enabled: bool
     tracing_provider: str
 
-
+# cdg:工作流中“添加功能”模块支持的功能特性
 class AppAdditionalFeatures(BaseModel):
     file_upload: Optional[FileUploadConfig] = None
     opening_statement: Optional[str] = None
@@ -230,6 +230,7 @@ class AppConfig(BaseModel):
     tenant_id: str
     app_id: str
     app_mode: AppMode
+    # cdg:支持completion、workflow、chat、advanced-chat、agent-chat、channel
     additional_features: AppAdditionalFeatures
     variables: list[VariableEntity] = []
     sensitive_word_avoidance: Optional[SensitiveWordAvoidanceEntity] = None

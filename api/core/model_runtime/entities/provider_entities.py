@@ -33,7 +33,7 @@ class FormShowOnObject(BaseModel):
     """
     Model class for form show on.
     """
-
+    # cdg:显示对象的名称还是值
     variable: str
     value: str
 
