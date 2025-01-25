@@ -7,6 +7,7 @@ class ModelCredentialSchemaValidator(CommonValidator):
     def __init__(self, model_type: ModelType, model_credential_schema: ModelCredentialSchema):
         self.model_type = model_type
         self.model_credential_schema = model_credential_schema
+        # cdg:ModelCredentialSchema包含模型名称和验证信息
 
     def validate_and_filter(self, credentials: dict) -> dict:
         """

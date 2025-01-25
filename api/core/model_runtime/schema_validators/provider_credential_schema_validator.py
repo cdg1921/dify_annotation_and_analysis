@@ -1,7 +1,7 @@
 from core.model_runtime.entities.provider_entities import ProviderCredentialSchema
 from core.model_runtime.schema_validators.common_validator import CommonValidator
 
-
+# cdg:这么多行代码，实际是根据给定的provider_credential_schema调用CommonValidator._validate_and_filter_credential_form_schemas
 class ProviderCredentialSchemaValidator(CommonValidator):
     def __init__(self, provider_credential_schema: ProviderCredentialSchema):
         self.provider_credential_schema = provider_credential_schema
