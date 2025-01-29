@@ -16,6 +16,7 @@ class RetrievalResourceConfigManager:
 
         :param config: app model config args
         """
+        # cdg:更新和验证config中retriever_resource的值
         if not config.get("retriever_resource"):
             config["retriever_resource"] = {"enabled": False}
 

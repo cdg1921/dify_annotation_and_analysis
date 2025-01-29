@@ -203,17 +203,18 @@ class PriceConfig(BaseModel):
     Model class for pricing info.
     """
 
-    input: Decimal
-    output: Optional[Decimal] = None
-    unit: Decimal
-    currency: str
+    input: Decimal                        # cdg:输入费用
+    output: Optional[Decimal] = None      # cdg:输出费用
+    unit: Decimal                         # cdg:计费单位，如token、千token等
+    currency: str                         # 币种
 
 
 class AIModelEntity(ProviderModel):
     """
     Model class for AI model.
     """
-    # cdg:AIModelEntity包含模型的各种参数信息及其计费方式
+    # cdg:基础实体对象之一
+    # cdg:AIModelEntity包含模型的各种参数信息及其计费方式，通用AIModel属性，还未涉及具体实例
     parameter_rules: list[ParameterRule] = []   # cdg:参数结构列表
     pricing: Optional[PriceConfig] = None       # cdg:计费方式
 

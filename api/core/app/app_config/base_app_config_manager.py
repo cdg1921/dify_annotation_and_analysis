@@ -13,7 +13,9 @@ from core.app.app_config.features.suggested_questions_after_answer.manager impor
 from core.app.app_config.features.text_to_speech.manager import TextToSpeechConfigManager
 from models.model import AppMode
 
-
+# cdg:APP应用基础配置
+#   [MessageBasedAppGenerator, AgentChatAppConfigManager,AdvancedChatAppConfigManager,
+#   CompletionAppConfigManager, WorkflowAppConfigManager] -> BaseAppGenerator
 class BaseAppConfigManager:
     @classmethod
     def convert_features(cls, config_dict: Mapping[str, Any], app_mode: AppMode) -> AppAdditionalFeatures:
@@ -25,7 +27,9 @@ class BaseAppConfigManager:
         """
         config_dict = dict(config_dict.items())
 
+        # cdg:实例化附加功能清单
         additional_features = AppAdditionalFeatures()
+        # cdg:根据config_dict中的值更新附加功能清单的值，下同
         additional_features.show_retrieve_source = RetrievalResourceConfigManager.convert(config=config_dict)
 
         additional_features.file_upload = FileUploadConfigManager.convert(

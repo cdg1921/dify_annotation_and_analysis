@@ -49,6 +49,7 @@ class ProviderConfiguration(BaseModel):
     """
 
     tenant_id: str
+    # cdg:ProviderEntity包括供应商名称、支持的模型类型、模型列表等
     provider: ProviderEntity
     preferred_provider_type: ProviderType
     using_provider_type: ProviderType
@@ -1059,10 +1060,15 @@ class ProviderModelBundle(BaseModel):
     """
     Provider model bundle.
     """
-
+    # cdg:模型供应商管理关键对象，理解ProviderModelBundle类中的对象及其内在属性之间的意思及其相互间的关系是梳理清楚DIFY模型供应商管理和应用的关键步骤
+    # cdg:ProviderConfiguration包括tenant_id、ProviderEntity、preferred_provider_type、using_provider_type: ProviderType、
+    #     SystemConfiguration、CustomConfiguration、list[ModelSettings]等
     configuration: ProviderConfiguration
+    # cdg:ModelProvider包括ProviderEntity（包括供应商名称、支持的模型类型、模型列表等）、model_instance_map（dict[str, AIModel]，其中字典中的key为供应商名称，value为该供应商支持的AIModel）
     provider_instance: ModelProvider
+    # cdg: AIModel(添加模型类型、鉴权信息) -> AIModelEntity(添加模型参数) -> ProviderModel(模型名称、特性、配置等)
     model_type_instance: AIModel
+    # cdg:，provider_instance中包含多个AIModel，而model_type_instance包含特定的AIModel
 
     # pydantic configs
     model_config = ConfigDict(arbitrary_types_allowed=True, protected_namespaces=())

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from core.workflow.utils.condition.entities import Condition
 
-
+# cdg:RunCondition运行条件，仅针对branch_identify和condition两种场景
 class RunCondition(BaseModel):
     type: Literal["branch_identify", "condition"]
     """condition type"""

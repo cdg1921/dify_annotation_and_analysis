@@ -27,8 +27,10 @@ class WorkflowAppQueueManager(AppQueueManager):
         """
         message = WorkflowQueueMessage(task_id=self._task_id, app_mode=self._app_mode, event=event)
 
+        # cdg:将WorkflowQueueMessage类型消息发布到消息队列中
         self._q.put(message)
 
+        # cdg:如果收到的是事件是stop、error、end等类型的消息，说明应用已经完成，停止监听
         if isinstance(
             event,
             QueueStopEvent

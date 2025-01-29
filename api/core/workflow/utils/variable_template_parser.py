@@ -10,6 +10,7 @@ SELECTOR_PATTERN = re.compile(r"\{\{(#[a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9
 
 
 def extract_selectors_from_template(template: str, /) -> Sequence[VariableSelector]:
+    # cdg:从输出答案中抽取出结点变量
     parts = SELECTOR_PATTERN.split(template)
     selectors = []
     for part in filter(lambda x: x, parts):

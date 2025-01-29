@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 # cdg:MessageBasedAppGenerator -> BaseAppGenerator
 class MessageBasedAppGenerator(BaseAppGenerator):
+    # cdg:BaseAppGenerator负责处理输入，MessageBasedAppGenerator处理输出，继承BaseAppGenerator，具备处理输入输出的能力
     def _handle_response(
         self,
         application_generate_entity: Union[
@@ -275,6 +276,7 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :param conversation_id: conversation id
         :return: conversation
         """
+        # cdg:根据会话ID获取会话
         conversation = db.session.query(Conversation).filter(Conversation.id == conversation_id).first()
 
         if not conversation:
@@ -288,6 +290,7 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :param message_id: message id
         :return: message
         """
+        # cdg:根据消息ID获取消息，一次会话中包含多个消息
         message = db.session.query(Message).filter(Message.id == message_id).first()
 
         return message

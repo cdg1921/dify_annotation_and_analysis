@@ -117,7 +117,7 @@ class ProviderEntity(BaseModel):
     """
     Model class for provider.
     """
-
+    # cdg:基础供应商实体对象之一
     provider: str
     label: I18nObject
     description: Optional[I18nObject] = None

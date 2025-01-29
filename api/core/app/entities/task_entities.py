@@ -652,7 +652,7 @@ class ChatbotAppBlockingResponse(AppBlockingResponse):
 
     data: Data
 
-
+# cdg: CompletionAppBlockingResponse与ChatbotAppBlockingResponse的区别是data中不包含conversation_id信息
 class CompletionAppBlockingResponse(AppBlockingResponse):
     """
     CompletionAppBlockingResponse entity

@@ -24,6 +24,7 @@ from core.app.entities.queue_entities import (
     QueueWorkflowStartedEvent,
     QueueWorkflowSucceededEvent,
 )
+# cdg:Event一般包括开始、结束或成功、失败、异常、重试等
 from core.workflow.entities.node_entities import NodeRunMetadataKey
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.graph_engine.entities.event import (
@@ -56,6 +57,15 @@ from extensions.ext_database import db
 from models.model import App
 from models.workflow import Workflow
 
+# cdg:Event（事件）和Message（消息）的差异比较：
+# 1、相同点：两者都可以用于异步通信，允许系统的不同部分在不直接相互依赖的情况下进行交互，有助于解耦系统组件，使得一个组件的变化不会直接影响到其他组件，都可以携带数据，传递信息给其他组件或系统
+# 2、不同点：
+# （1）定义方面：Event：通常表示某个特定的事情发生了，通常是状态的变化。例如，用户点击按钮、文件上传完成等。事件通常是“发生了什么”的描述。
+#             Message：通常是指在系统之间传递的信息，可能包含指令、请求或数据。消息可以是请求某个操作的指令，或者是对某个事件的响应。
+#  (2)使用场景：Event：常用于事件驱动架构中，通常由事件源（如用户操作、系统状态变化）生成，其他组件可以订阅这些事件并作出反应。
+#             Message：常用于消息传递系统中，通常用于请求-响应模式或命令模式，发送者和接收者之间可能存在明确的请求和响应关系。
+#  (3)处理方式：Event：通常是广播的，多个订阅者可以同时接收到同一个事件。
+#             Message：通常是点对点的，消息发送者和接收者之间有明确的联系。
 
 class WorkflowBasedAppRunner(AppRunner):
     def __init__(self, queue_manager: AppQueueManager):
@@ -148,6 +158,7 @@ class WorkflowBasedAppRunner(AppRunner):
         node_version = iteration_node_config.get("data", {}).get("version", "1")
         node_cls = NODE_TYPE_CLASSES_MAPPING[node_type][node_version]
 
+        # cdg:初始化会话变量
         # init variable pool
         variable_pool = VariablePool(
             system_variables={},

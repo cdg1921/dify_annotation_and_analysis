@@ -25,11 +25,14 @@ class AppGenerateResponseConverter(ABC):
         response: Union[AppBlockingResponse, Generator[AppStreamResponse, Any, None]],
         invoke_from: InvokeFrom,
     ) -> Mapping[str, Any] | Generator[str, None, None]:
+        # cdg:不同调用来源，输出方式不一样，debug和service_api方式，输出全部信息；其他方式，输出简化格式信息
+        # cdg:4中场景，blocking或stream、full或simple
         if invoke_from in {InvokeFrom.DEBUGGER, InvokeFrom.SERVICE_API}:
             if isinstance(response, AppBlockingResponse):
+                # cdg:转为字典格式输出
                 return cls.convert_blocking_full_response(response)
             else:
-
+                # cdg:流式输出
                 def _generate_full_response() -> Generator[str, Any, None]:
                     for chunk in cls.convert_stream_full_response(response):
                         if chunk == "ping":
@@ -40,6 +43,7 @@ class AppGenerateResponseConverter(ABC):
                 return _generate_full_response()
         else:
             if isinstance(response, AppBlockingResponse):
+                # cdg:转为字典格式输出，添加metadata信息
                 return cls.convert_blocking_simple_response(response)
             else:
 
@@ -98,10 +102,12 @@ class AppGenerateResponseConverter(ABC):
                 )
             metadata["retriever_resources"] = updated_resources
 
+        # cdg:删除注释信息
         # show annotation reply
         if "annotation_reply" in metadata:
             del metadata["annotation_reply"]
 
+        # cdg:删除usage计费信息
         # show usage
         if "usage" in metadata:
             del metadata["usage"]

@@ -29,7 +29,7 @@ from models.model import App, AppMode, Message, MessageAnnotation
 if TYPE_CHECKING:
     from core.file.models import File
 
-
+# cdg:基础应用执行器
 class AppRunner:
     def get_pre_calculate_rest_tokens(
         self,
@@ -42,7 +42,7 @@ class AppRunner:
     ) -> int:
         """
         Get pre calculate rest tokens
-        # cdg:计算可用token长度，即上下文总长度-max_tokens-Prompt之后剩余的tokens长度
+
         :param app_record: app record
         :param model_config: model config entity
         :param prompt_template_entity: prompt template entity
@@ -51,6 +51,8 @@ class AppRunner:
         :param query: query
         :return:
         """
+        # cdg:计算可用token长度，即上下文总长度-max_tokens-Prompt之后剩余的tokens长度
+
         # Invoke model
         # cdg:通过ModelInstance的方式实例化大模型实例。
         # 大模型实例化有两种方式：一种是ModelInstance，另一种是ModelManager。两者的参数不同，后者继承了前者。

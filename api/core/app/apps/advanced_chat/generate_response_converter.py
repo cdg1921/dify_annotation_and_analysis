@@ -15,7 +15,9 @@ from core.app.entities.task_entities import (
     PingStreamResponse,
 )
 
-
+# cdg:继承AppGenerateResponseConverter类，需要实现4种场景response输出方式：
+# convert_blocking_full_response、convert_blocking_simple_response、
+# convert_stream_full_response、convert_stream_simple_response
 class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
     _blocking_response_type = ChatbotAppBlockingResponse
 
@@ -26,6 +28,7 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
         :param blocking_response: blocking response
         :return:
         """
+        # cdg:ChatbotAppBlockingResponse包含一个task_id和一个data字典
         blocking_response = cast(ChatbotAppBlockingResponse, blocking_response)
         response = {
             "event": "message",
@@ -48,8 +51,10 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
         :param blocking_response: blocking response
         :return:
         """
+        # cdg:转成字典
         response = cls.convert_blocking_full_response(blocking_response)
 
+        # cdg:对字典中metadata的内容进行简化
         metadata = response.get("metadata", {})
         response["metadata"] = cls._get_simple_metadata(metadata)
 
@@ -64,6 +69,7 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
         :param stream_response: stream response
         :return:
         """
+        # cdg:将stream_response转为多个chunk输出
         for chunk in stream_response:
             chunk = cast(ChatbotAppStreamResponse, chunk)
             sub_stream_response = chunk.stream_response
@@ -72,6 +78,7 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 yield "ping"
                 continue
 
+            # cdg:构建response_chunk的基础信息，包括事件类型、会话ID、消息ID、创建时间，注意，此时还不包含生成的数据
             response_chunk = {
                 "event": sub_stream_response.event.value,
                 "conversation_id": chunk.conversation_id,
@@ -79,7 +86,9 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 "created_at": chunk.created_at,
             }
 
+            # cdg:将大模型生成的信息添加到response_chunk中，构成完整的输出
             if isinstance(sub_stream_response, ErrorStreamResponse):
+                # cdg:构建错误响应信息
                 data = cls._error_to_stream_response(sub_stream_response.err)
                 response_chunk.update(data)
             else:
@@ -103,6 +112,7 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 yield "ping"
                 continue
 
+            # cdg:构建response_chunk的基础信息，包括事件类型、会话ID、消息ID、创建时间，注意，此时还不包含生成的数据
             response_chunk = {
                 "event": sub_stream_response.event.value,
                 "conversation_id": chunk.conversation_id,
@@ -110,6 +120,7 @@ class AdvancedChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 "created_at": chunk.created_at,
             }
 
+            # cdg:将大模型生成的信息添加到response_chunk中，构成完整的输出
             if isinstance(sub_stream_response, MessageEndStreamResponse):
                 sub_stream_response_dict = sub_stream_response.to_dict()
                 metadata = sub_stream_response_dict.get("metadata", {})

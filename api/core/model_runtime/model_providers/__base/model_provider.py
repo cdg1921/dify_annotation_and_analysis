@@ -14,7 +14,7 @@ class ModelProvider(ABC):
     model_instance_map: dict[str, AIModel] = {}
 
     # cdg:AIModel -> AIModelEntity(添加模型参数) -> ProviderModel(模型名称、特性、配置等)
-    # 此外，作为ModelProviderFactory的主要组成部分。
+    # 此外，作为ModelProviderFactory和ProviderModelBundle的主要组成部分。
 
     @abstractmethod
     def validate_provider_credentials(self, credentials: dict) -> None:

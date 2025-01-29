@@ -57,7 +57,7 @@ class ModelConfigWithCredentialsEntity(BaseModel):
     """
     Model Config With Credentials Entity.
     """
-
+    # cdg:模型供应商管理重要对象
     provider: str
     model: str
     model_schema: AIModelEntity
