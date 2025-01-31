@@ -25,19 +25,22 @@ class EndStreamProcessor(StreamProcessor):
         self.has_output = False
         self.output_node_ids: set[str] = set()
 
+    # cdg:处理不同事件输出
     def process(self, generator: Generator[GraphEngineEvent, None, None]) -> Generator[GraphEngineEvent, None, None]:
         for event in generator:
             if isinstance(event, NodeRunStartedEvent):
+                # cdg:只有一个节点，重置配置
                 if event.route_node_state.node_id == self.graph.root_node_id and not self.rest_node_ids:
+                    # cdg:重置self.route_position、self.rest_node_ids、self参数current_stream_chunk_generating_node_ids等
                     self.reset()
 
                 yield event
-            elif isinstance(event, NodeRunStreamChunkEvent):
+            elif isinstance(event, NodeRunStreamChunkEvent):   # cdg:结点运行流输出事件
                 if event.in_iteration_id:
                     if self.has_output and event.node_id not in self.output_node_ids:
                         event.chunk_content = "\n" + event.chunk_content
 
-                    self.output_node_ids.add(event.node_id)
+                    self.output_node_ids.add(event.node_id)   # cdg:集合添加元素
                     self.has_output = True
                     yield event
                     continue
@@ -59,7 +62,7 @@ class EndStreamProcessor(StreamProcessor):
                     self.output_node_ids.add(event.node_id)
                     self.has_output = True
                     yield event
-            elif isinstance(event, NodeRunSucceededEvent):
+            elif isinstance(event, NodeRunSucceededEvent):  # cdg:结点运行成功事件
                 yield event
                 if event.route_node_state.node_id in self.current_stream_chunk_generating_node_ids:
                     # update self.route_position after all stream event finished
@@ -77,6 +80,7 @@ class EndStreamProcessor(StreamProcessor):
                 yield event
 
     def reset(self) -> None:
+        # cdg:重置self.route_position、self.rest_node_ids、self参数current_stream_chunk_generating_node_ids等
         self.route_position = {}
         for end_node_id, _ in self.end_stream_param.end_stream_variable_selector_mapping.items():
             self.route_position[end_node_id] = 0
@@ -91,7 +95,9 @@ class EndStreamProcessor(StreamProcessor):
         :param event: node run succeeded event
         :return:
         """
+        # cdg:节点运行成功时，节点一次性输出
         for end_node_id, position in self.route_position.items():
+            # cdg:所有依赖结束结点的节点都不在rest_node_ids中，即所有结束节点都处理
             # all depends on end node id not in rest node ids
             if event.route_node_state.node_id != end_node_id and (
                 end_node_id not in self.rest_node_ids
@@ -101,6 +107,7 @@ class EndStreamProcessor(StreamProcessor):
             ):
                 continue
 
+            # cdg:当前路由位置index
             route_position = self.route_position[end_node_id]
 
             position = 0
@@ -111,6 +118,7 @@ class EndStreamProcessor(StreamProcessor):
 
                 position += 1
 
+            # cdg:对于节点变量，从变量池（会话变量）中读取相应的值
             for value_selector in value_selectors:
                 if not value_selector:
                     continue

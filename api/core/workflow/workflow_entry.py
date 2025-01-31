@@ -36,12 +36,12 @@ class WorkflowEntry:
         tenant_id: str,
         app_id: str,
         workflow_id: str,
-        workflow_type: WorkflowType,
+        workflow_type: WorkflowType,      # cdg:WorkflowType:"workflow"或"chat"
         graph_config: Mapping[str, Any],
         graph: Graph,
         user_id: str,
         user_from: UserFrom,
-        invoke_from: InvokeFrom,
+        invoke_from: InvokeFrom,          # cdg:SERVICE_API = "service-api"、"web-app"、"explore"、"debugger"
         call_depth: int,
         variable_pool: VariablePool,
         thread_pool_id: Optional[str] = None,
@@ -61,6 +61,7 @@ class WorkflowEntry:
         :param variable_pool: variable pool
         :param thread_pool_id: thread pool id
         """
+        # cdg:工作流最大嵌套深度
         # check call depth
         workflow_call_max_depth = dify_config.WORKFLOW_CALL_MAX_DEPTH
         if call_depth > workflow_call_max_depth:

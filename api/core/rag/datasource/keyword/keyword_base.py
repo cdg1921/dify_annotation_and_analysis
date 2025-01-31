@@ -6,7 +6,7 @@ from typing import Any
 from core.rag.models.document import Document
 from models.dataset import Dataset
 
-
+# cdg:Jieba -> BaseKeyword，目前DIFY只支持基于jieba的方式抽取关键词
 class BaseKeyword(ABC):
     def __init__(self, dataset: Dataset):
         self.dataset = dataset

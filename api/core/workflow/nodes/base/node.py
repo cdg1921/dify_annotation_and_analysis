@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 GenericNodeData = TypeVar("GenericNodeData", bound=BaseNodeData)
 
-
+# cdg:工作流节点基础类，针对单个节点，多个节点连接起来是一个图或者并行模块（parallel）
+# cdg:BaseNode(Generic[GenericNodeData])表明BaseNode实际上继承BaseNodeData,BaseNode只是构建了一个节点的基本属性和方法，一些方法根据节点类型的不同实现方式也不同
 class BaseNode(Generic[GenericNodeData]):
     _node_data_cls: type[BaseNodeData]
     _node_type: NodeType
@@ -29,11 +30,11 @@ class BaseNode(Generic[GenericNodeData]):
         self,
         id: str,
         config: Mapping[str, Any],
-        graph_init_params: "GraphInitParams",
-        graph: "Graph",
-        graph_runtime_state: "GraphRuntimeState",
-        previous_node_id: Optional[str] = None,
-        thread_pool_id: Optional[str] = None,
+        graph_init_params: "GraphInitParams",      # cdg:图初始化参数，初始参数
+        graph: "Graph",                            # cdg:图结构实例
+        graph_runtime_state: "GraphRuntimeState",  # cdg:图运行状态
+        previous_node_id: Optional[str] = None,    # cdg:前一个结点ID，对于start节点，前一个结点为None
+        thread_pool_id: Optional[str] = None,      # cdg:线程池ID
     ) -> None:
         self.id = id
         self.tenant_id = graph_init_params.tenant_id
@@ -82,6 +83,8 @@ class BaseNode(Generic[GenericNodeData]):
             yield RunCompletedEvent(run_result=result)
         else:
             yield from result
+            # cdg:yield from是一个用于从另一个生成器或可迭代对象中委托生成值的语句。它允许一个生成器将其控制权转移到另一个生成器，并将该生成器产生的所有值逐一返回。
+            # result是一个可迭代对象，可能是另一个生成器、列表、元组或任何实现了迭代协议的对象。
 
     @classmethod
     def extract_variable_selector_to_variable_mapping(
@@ -96,6 +99,7 @@ class BaseNode(Generic[GenericNodeData]):
         :param config: node config
         :return:
         """
+        # cdg:extract_variable_selector_to_variable_mapping函数输出示例：{'node_id':['node_id', 'query', 'name'], 'node_id':['node_id', 'query', 'age']}
         node_id = config.get("id")
         if not node_id:
             raise ValueError("Node ID is required when extracting variable selector to variable mapping.")

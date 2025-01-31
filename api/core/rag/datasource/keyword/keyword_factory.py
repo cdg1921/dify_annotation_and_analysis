@@ -19,6 +19,7 @@ class Keyword:
 
     @staticmethod
     def get_keyword_factory(keyword_type: str) -> type[BaseKeyword]:
+        # cdg:目前仅支持jieba方式的关键词提取
         match keyword_type:
             case KeyWordType.JIEBA:
                 from core.rag.datasource.keyword.jieba.jieba import Jieba

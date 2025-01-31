@@ -193,6 +193,7 @@ class Jieba(BaseKeyword):
 
     def _retrieve_ids_by_query(self, keyword_table: dict, query: str, k: int = 4):
         keyword_table_handler = JiebaKeywordTableHandler()
+        # cdg:对query抽取关键词列表
         keywords = keyword_table_handler.extract_keywords(query)
 
         # go through text chunks in order of most matching keywords

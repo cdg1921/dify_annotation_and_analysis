@@ -18,7 +18,7 @@ VariableValue = Union[str, int, float, dict, list, File]
 
 VARIABLE_PATTERN = re.compile(r"\{\{#([a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9_]{0,29}){1,10})#\}\}")
 
-
+# cdg:变量池，存放会话变量中的变量
 class VariablePool(BaseModel):
     # Variable dictionary is a dictionary for looking up variables by their selector.
     # The first element of the selector is the node id, it's the first-level key in the dictionary.

@@ -14,6 +14,7 @@ class EndStreamGeneratorRouter:
         Get stream generate routes.
         :return:
         """
+        # cdg:end_stream_variable_selectors_mapping输出示例：{'node_id':['node_id', 'query', 'name'], 'node_id':['node_id', 'query', 'age']}
         # parse stream output node value selector of end nodes
         end_stream_variable_selectors_mapping: dict[str, list[list[str]]] = {}
         for end_node_id, node_config in node_id_config_mapping.items():

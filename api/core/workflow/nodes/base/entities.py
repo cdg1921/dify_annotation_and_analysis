@@ -8,7 +8,7 @@ from pydantic import BaseModel, model_validator
 from core.workflow.nodes.base.exc import DefaultValueTypeError
 from core.workflow.nodes.enums import ErrorStrategy
 
-
+# cdg:工作流节点和智能体中数据类型取值范围
 class DefaultValueType(StrEnum):
     STRING = "string"
     NUMBER = "number"
@@ -118,7 +118,7 @@ class RetryConfig(BaseModel):
     def retry_interval_seconds(self) -> float:
         return self.retry_interval / 1000
 
-
+# cdg:节点数据基本类
 class BaseNodeData(ABC, BaseModel):
     title: str
     desc: Optional[str] = None

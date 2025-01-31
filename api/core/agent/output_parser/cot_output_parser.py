@@ -6,7 +6,7 @@ from typing import Union
 from core.agent.entities import AgentScratchpadUnit
 from core.model_runtime.entities.llm_entities import LLMResultChunk
 
-
+# cdg:解析COT输出
 class CotAgentOutputParser:
     @classmethod
     def handle_react_stream_output(
@@ -28,6 +28,7 @@ class CotAgentOutputParser:
                     else:
                         action_name = value
 
+                # cdg:如果是Action，则将Action名称和Action的输入构建AgentScratchpadUnit输出
                 if action_name is not None and action_input is not None:
                     return AgentScratchpadUnit.Action(
                         action_name=action_name,
@@ -68,6 +69,7 @@ class CotAgentOutputParser:
             if response.delta.usage:
                 usage_dict["usage"] = response.delta.usage
             response_content = response.delta.message.content
+            # cdg:正常情况下response.delta.message.content的格式为str类型
             if not isinstance(response_content, str):
                 continue
 

@@ -92,6 +92,7 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
 
 ENGLISH_REACT_CHAT_AGENT_SCRATCHPAD_TEMPLATES = ""
 
+# cdg:react提示词模板
 REACT_PROMPT_TEMPLATES = {
     "english": {
         "chat": {

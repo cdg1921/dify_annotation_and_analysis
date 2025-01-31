@@ -8,26 +8,26 @@ from core.entities.provider_entities import QuotaUnit, RestrictModel
 from core.model_runtime.entities.model_entities import ModelType
 from models.provider import ProviderQuotaType
 
-
+# cdg:额度调用对象
 class HostingQuota(BaseModel):
-    quota_type: ProviderQuotaType
+    quota_type: ProviderQuotaType               # cdg:额度类别，付费、免费、试用
     restrict_models: list[RestrictModel] = []
 
-
+# cdg:试用额度
 class TrialHostingQuota(HostingQuota):
     quota_type: ProviderQuotaType = ProviderQuotaType.TRIAL
     quota_limit: int = 0
     """Quota limit for the hosting provider models. -1 means unlimited."""
 
-
+# cdg:付费额度
 class PaidHostingQuota(HostingQuota):
     quota_type: ProviderQuotaType = ProviderQuotaType.PAID
 
-
+# cdg:免费额度
 class FreeHostingQuota(HostingQuota):
     quota_type: ProviderQuotaType = ProviderQuotaType.FREE
 
-
+# cdg:模型服务提供商
 class HostingProvider(BaseModel):
     enabled: bool = False
     credentials: Optional[dict] = None

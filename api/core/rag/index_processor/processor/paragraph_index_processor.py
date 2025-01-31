@@ -16,18 +16,20 @@ from libs import helper
 from models.dataset import Dataset, DatasetProcessRule
 from services.entities.knowledge_entities.knowledge_entities import Rule
 
-
+# cdg:针对文档进行分段处理
 class ParagraphIndexProcessor(BaseIndexProcessor):
+    # cdg:文件内容抽取
     def extract(self, extract_setting: ExtractSetting, **kwargs) -> list[Document]:
         text_docs = ExtractProcessor.extract(
             extract_setting=extract_setting,
             is_automatic=(
                 kwargs.get("process_rule_mode") == "automatic" or kwargs.get("process_rule_mode") == "hierarchical"
-            ),
+            ),  # cdg:是否自动切分
         )
 
         return text_docs
 
+    # cdg:文档内容分块，划分chunk
     def transform(self, documents: list[Document], **kwargs) -> list[Document]:
         process_rule = kwargs.get("process_rule")
         if not process_rule:
@@ -51,28 +53,36 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         )
         all_documents = []
         for document in documents:
+            # cdg:文档数据清洗，删除特殊符号
             # document clean
             document_text = CleanProcessor.clean(document.page_content, kwargs.get("process_rule", {}))
             document.page_content = document_text
+            # cdg:将文档内容切分为多个chunk，每个chunk对应一个document_node
             # parse document to nodes
             document_nodes = splitter.split_documents([document])
             split_documents = []
             for document_node in document_nodes:
+                # cdg:创建文本块实例document_node，对chunk进行封装，添加doc_id、doc_hash等信息
                 if document_node.page_content.strip():
                     doc_id = str(uuid.uuid4())
                     hash = helper.generate_text_hash(document_node.page_content)
                     if document_node.metadata is not None:
                         document_node.metadata["doc_id"] = doc_id
                         document_node.metadata["doc_hash"] = hash
+
+                    # cdg:删除分隔符
                     # delete Splitter character
                     page_content = remove_leading_symbols(document_node.page_content).strip()
                     if len(page_content) > 0:
                         document_node.page_content = page_content
                         split_documents.append(document_node)
+            # cdg:将所有文档切分结果添加到all_documents中
             all_documents.extend(split_documents)
         return all_documents
 
+    # cdg:知识入库
     def load(self, dataset: Dataset, documents: list[Document], with_keywords: bool = True, **kwargs):
+        # cdg:如果是高质量召回，则将每个文本块向量化入库；如果是经济模式，则对每个文本块抽取关键词，构建倒排索引表，添加到关键词表中
         if dataset.indexing_technique == "high_quality":
             vector = Vector(dataset)
             vector.create(documents)
@@ -84,6 +94,7 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
             else:
                 keyword.add_texts(documents)
 
+    # cdg:删除文本块信息，根据索引模式，删除向量库的数据或者关键词表中的数据
     def clean(self, dataset: Dataset, node_ids: Optional[list[str]], with_keywords: bool = True, **kwargs):
         if dataset.indexing_technique == "high_quality":
             vector = Vector(dataset)
@@ -98,6 +109,7 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
             else:
                 keyword.delete()
 
+    # cdg:知识召回函数
     def retrieve(
         self,
         retrieval_method: str,
@@ -107,6 +119,8 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         score_threshold: float,
         reranking_model: dict,
     ) -> list[Document]:
+
+        # cdg:知识召回函数
         # Set search parameters.
         results = RetrievalService.retrieve(
             retrieval_method=retrieval_method,
@@ -116,6 +130,7 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
             score_threshold=score_threshold,
             reranking_model=reranking_model,
         )
+        # cdg:根据指定的score对召回结果进行过滤
         # Organize results.
         docs = []
         for result in results:

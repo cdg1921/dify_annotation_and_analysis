@@ -58,7 +58,10 @@ class Graph(BaseModel):
     node_parallel_mapping: dict[str, str] = Field(
         default_factory=dict, description="graph node parallel mapping (node id: parallel id)"
     )
-    # cdg:两种工作流输出方式：AnswerStreamGenerateRoute和EndStreamParam
+    # cdg:两种工作流输出方式：AnswerStreamGenerateRoute和EndStreamParam，
+    # end_stream_param在EndStreamProcessor中调用，answer_stream_generate_routes在AnswerStreamProcessor中调用。
+    # 调用EndStreamProcessor还是AnswerStreamProcessor详看GraphEngine。GraphEngine在WorkflowEntry中被调用。
+    # 综上，WorkflowEntry -> GraphEngine -> [EndStreamProcessor, AnswerStreamProcessor]
     answer_stream_generate_routes: AnswerStreamGenerateRoute = Field(..., description="answer stream generate routes")
     end_stream_param: EndStreamParam = Field(..., description="end stream param")
 

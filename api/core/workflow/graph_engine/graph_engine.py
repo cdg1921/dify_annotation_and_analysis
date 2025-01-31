@@ -53,7 +53,7 @@ from models.workflow import WorkflowNodeExecutionStatus, WorkflowType
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:多线程执行器，集成ThreadPoolExecutor，新增线程任务控制功能，包括线程统计、新增、减少线程数量等
 class GraphEngineThreadPool(ThreadPoolExecutor):
     def __init__(
         self,
@@ -82,6 +82,8 @@ class GraphEngineThreadPool(ThreadPoolExecutor):
 
 
 class GraphEngine:
+    # cdg:多线程执行器，集成ThreadPoolExecutor，新增线程任务控制功能，包括线程统计、新增、减少线程数量等；
+    # cdg:为每个工作流添加一个线程处理器，支持工作流任务并发执行，key为线程池ID，value为GraphEngineThreadPool实例
     workflow_thread_pool_mapping: dict[str, GraphEngineThreadPool] = {}
 
     def __init__(
@@ -101,18 +103,22 @@ class GraphEngine:
         max_execution_time: int,
         thread_pool_id: Optional[str] = None,
     ) -> None:
+        # cdg:每个线程池最大并发数，默认100个
         thread_pool_max_submit_count = dify_config.MAX_SUBMIT_COUNT
         thread_pool_max_workers = 10
 
         # init thread pool
         if thread_pool_id:
+            # cdg:如果线程池ID已经存在但不在workflow_thread_pool_mapping中，则保存
             if thread_pool_id not in GraphEngine.workflow_thread_pool_mapping:
                 raise ValueError(f"Max submit count {thread_pool_max_submit_count} of workflow thread pool reached.")
 
+            # cdg:已经存在workflow_thread_pool_mapping中的线程池，默认为非主线程池
             self.thread_pool_id = thread_pool_id
             self.thread_pool = GraphEngine.workflow_thread_pool_mapping[thread_pool_id]
             self.is_main_thread_pool = False
         else:
+            # cdg:workflow_thread_pool_mapping的第一个线程池为住线程池
             self.thread_pool = GraphEngineThreadPool(
                 max_workers=thread_pool_max_workers, max_submit_count=thread_pool_max_submit_count
             )
@@ -121,6 +127,7 @@ class GraphEngine:
             GraphEngine.workflow_thread_pool_mapping[self.thread_pool_id] = self.thread_pool
 
         self.graph = graph
+        # cdg:初始化图参数
         self.init_params = GraphInitParams(
             tenant_id=tenant_id,
             app_id=app_id,
@@ -133,8 +140,10 @@ class GraphEngine:
             call_depth=call_depth,
         )
 
+        # cdg:初始化图运行时状态
         self.graph_runtime_state = GraphRuntimeState(variable_pool=variable_pool, start_at=time.perf_counter())
 
+        # cdg:最大执行步数和最大执行时间，防止任务陷入死循环
         self.max_execution_steps = max_execution_steps
         self.max_execution_time = max_execution_time
 
@@ -142,9 +151,11 @@ class GraphEngine:
         # trigger graph run start event
         yield GraphRunStartedEvent()
         handle_exceptions: list[str] = []
+        # cdg:指定stream_processor为stream_processor对象实例，AnswerStreamProcessor和EndStreamProcessor均继承于StreamProcessor
         stream_processor: StreamProcessor
 
         try:
+            # cdg:chat模式下用AnswerStreamProcessor，workflow模式下用EndStreamProcessor
             if self.init_params.workflow_type == WorkflowType.CHAT:
                 stream_processor = AnswerStreamProcessor(
                     graph=self.graph, variable_pool=self.graph_runtime_state.variable_pool

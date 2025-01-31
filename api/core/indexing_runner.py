@@ -41,21 +41,25 @@ from models.model import UploadFile
 from services.feature_service import FeatureService
 
 
+# cdg:知识召回主程序
 class IndexingRunner:
     def __init__(self):
-        self.storage = storage
-        self.model_manager = ModelManager()
+        self.storage = storage                 # cdg:文件存储方式实例，默认本地存储
+        self.model_manager = ModelManager()    # cdg:模型管理器
 
     def run(self, dataset_documents: list[DatasetDocument]):
         """Run the indexing process."""
+        # cdg:为文档创建索引（即文档切分和向量化），输入为文档列表
         for dataset_document in dataset_documents:
             try:
+                # cdg:确定数据集（一个dataset对应一个知识库）
                 # get dataset
                 dataset = Dataset.query.filter_by(id=dataset_document.dataset_id).first()
 
                 if not dataset:
                     raise ValueError("no dataset found")
 
+                # 处理规则，自动切分、自定义切分等
                 # get the process rule
                 processing_rule = (
                     db.session.query(DatasetProcessRule)
@@ -65,17 +69,24 @@ class IndexingRunner:
                 if not processing_rule:
                     raise ValueError("no process rule found")
                 index_type = dataset_document.doc_form
+                # cdg:初始化向量处理器，针对不同索引类型，文档处理的方式不一样，如文档分段、QA生成等
                 index_processor = IndexProcessorFactory(index_type).init_index_processor()
+
+                # cdg:文本抽取，不同格式文档（如PDF、Excel、CSV等）实现方式不一样，接口都是一样的
                 # extract
                 text_docs = self._extract(index_processor, dataset_document, processing_rule.to_dict())
 
+                # cdg:根据指定的规则对文本进行分段，将文本块转为document对象
                 # transform
                 documents = self._transform(
                     index_processor, dataset, text_docs, dataset_document.doc_language, processing_rule.to_dict()
                 )
+
+                # cdg:更新document和segment的状态为indexing
                 # save segment
                 self._load_segments(dataset, dataset_document, documents)
 
+                # cdg:向量化并入库，不仅入到向量库中，同时转为哈希码存到关系数据库中。在检索时，先根据哈希值在关系库中检索，检索不到到做向量化召回
                 # load
                 self._load(
                     index_processor=index_processor,
@@ -531,6 +542,7 @@ class IndexingRunner:
         indexing_start_at = time.perf_counter()
         tokens = 0
         if dataset_document.doc_form != IndexType.PARENT_CHILD_INDEX:
+            # cdg:创建关键词倒排索引
             # create keyword index
             create_keyword_thread = threading.Thread(
                 target=self._process_keyword_index,
@@ -538,6 +550,7 @@ class IndexingRunner:
             )
             create_keyword_thread.start()
 
+        # cdg:多线程实现文本块（chunk）向量化入库。segment和chunk都是文本块的表示，chunk是只单独的文本块，segment是对chunk的封装，包括文本块机器元数据信息
         max_workers = 10
         if dataset.indexing_technique == "high_quality":
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -572,6 +585,7 @@ class IndexingRunner:
             create_keyword_thread.join()
         indexing_end_at = time.perf_counter()
 
+        # cdg:文本块入库完成之后，更新document的状态为completed
         # update document status to completed
         self._update_document_index_status(
             document_id=dataset_document.id,
@@ -590,8 +604,11 @@ class IndexingRunner:
             dataset = Dataset.query.filter_by(id=dataset_id).first()
             if not dataset:
                 raise ValueError("no dataset found")
+            # cdg:初始化关键词检索器
             keyword = Keyword(dataset)
+            # cdg:关键词提取和入库
             keyword.create(documents)
+            # cdg:DIFY两种召回模式，高质量召回（向量索引）和经济召回（关键词倒排索引），非高质量模式，就是倒排索引模式，完成倒排索引之后，不需要向量化入库，将状态改为completed状态
             if dataset.indexing_technique != "high_quality":
                 document_ids = [document.metadata["doc_id"] for document in documents]
                 db.session.query(DocumentSegment).filter(
@@ -616,6 +633,7 @@ class IndexingRunner:
             # check document is paused
             self._check_document_paused_status(dataset_document.id)
 
+            # cdg:统计tokens总量
             tokens = 0
             if embedding_model_instance:
                 tokens += sum(
@@ -623,9 +641,11 @@ class IndexingRunner:
                     for document in chunk_documents
                 )
 
+            # cdg:向量化入库
             # load index
             index_processor.load(dataset, chunk_documents, with_keywords=False)
 
+            # cdg:将segment的状态由indexing改为completed，segment入库过程完成
             document_ids = [document.metadata["doc_id"] for document in chunk_documents]
             db.session.query(DocumentSegment).filter(
                 DocumentSegment.document_id == dataset_document.id,
@@ -646,6 +666,7 @@ class IndexingRunner:
 
     @staticmethod
     def _check_document_paused_status(document_id: str):
+        # cdg:在Redis中检查文档处理是否处于停止状态
         indexing_cache_key = "document_{}_is_paused".format(document_id)
         result = redis_client.get(indexing_cache_key)
         if result:
@@ -681,6 +702,7 @@ class IndexingRunner:
         DocumentSegment.query.filter_by(document_id=dataset_document_id).update(update_params)
         db.session.commit()
 
+    # cdg:根据指定的规则对文本进行分段，将文本块转为document对象
     def _transform(
         self,
         index_processor: BaseIndexProcessor,
@@ -692,6 +714,7 @@ class IndexingRunner:
         # get embedding model instance
         embedding_model_instance = None
         if dataset.indexing_technique == "high_quality":
+            # cdg:如果指定Embedding模型，则根据指定的信息构建Embedding模型实例，否则读取系统默认Embedding模型
             if dataset.embedding_model_provider:
                 embedding_model_instance = self.model_manager.get_model_instance(
                     tenant_id=dataset.tenant_id,

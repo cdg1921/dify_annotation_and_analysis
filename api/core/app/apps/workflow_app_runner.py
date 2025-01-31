@@ -153,6 +153,7 @@ class WorkflowBasedAppRunner(AppRunner):
         if not iteration_node_config:
             raise ValueError("iteration node id not found in workflow graph")
 
+        # cdg:获取节点实例
         # Get node class
         node_type = NodeType(iteration_node_config.get("data", {}).get("type"))
         node_version = iteration_node_config.get("data", {}).get("version", "1")
@@ -167,6 +168,7 @@ class WorkflowBasedAppRunner(AppRunner):
         )
 
         try:
+            # cdg:variable_mapping输出示例：{'node_id':['node_id', 'query', 'name'], 'node_id':['node_id', 'query', 'age']}
             variable_mapping = node_cls.extract_variable_selector_to_variable_mapping(
                 graph_config=workflow.graph_dict, config=iteration_node_config
             )
