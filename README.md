@@ -10,10 +10,6 @@
 所有改动地方均以“# cdg:”开头作为标识，主要对源码进行注释和分析。
 
 
-## Security disclosure
-
-To protect your privacy, please avoid posting security issues on GitHub. Instead, send your questions to security@dify.ai and we will provide you with a more detailed answer.
-
 ## License
 
 This repository is available under the [Dify Open Source License](LICENSE), which is essentially Apache 2.0 with a few additional restrictions.
