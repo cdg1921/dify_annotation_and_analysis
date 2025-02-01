@@ -189,7 +189,7 @@ class RetrievalService:
                 if not dataset:
                     raise ValueError("dataset not found")
 
-                # cdg:创建向量检索实例（向量库实例）
+                # cdg:创建向量检索实例
                 vector = Vector(dataset=dataset)
 
                 # cdg:执行向量召回

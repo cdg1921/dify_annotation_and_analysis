@@ -151,6 +151,8 @@ class Vector:
             case _:
                 raise ValueError(f"Vector store {vector_type} is not supported.")
 
+    # cdg:以下函数具体实现详看CacheEmbedding和向量库供应商具体实例，其中self._embeddings是CacheEmbedding的示例
+    # cdg:self._vector_processor详看get_vector_factory中对应的供应商实例
     def create(self, texts: Optional[list] = None, **kwargs):
         if texts:
             embeddings = self._embeddings.embed_documents([document.page_content for document in texts])
@@ -195,6 +197,7 @@ class Vector:
             model_type=ModelType.TEXT_EMBEDDING,
             model=self._dataset.embedding_model,
         )
+        # cdg:返回CacheEmbedding实例，CacheEmbedding示例可以实现将document和query转为Embedding
         return CacheEmbedding(embedding_model)
 
     def _filter_duplicate_texts(self, texts: list[Document]) -> list[Document]:

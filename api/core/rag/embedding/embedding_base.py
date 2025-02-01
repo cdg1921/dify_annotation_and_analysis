@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-
+# cdg:Embedding的基础类
 class Embeddings(ABC):
     """Interface for embedding models."""
 
