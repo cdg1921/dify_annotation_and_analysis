@@ -53,7 +53,7 @@ class RetrievalService:
         if retrieval_method == "keyword_search":  # cdg:经济索引模式，关键词倒排索引
             # cdg:创建关键词检索线程
             keyword_thread = threading.Thread(
-                target=RetrievalService.keyword_search,
+                target=RetrievalService.keyword_search,  # cdg:调用当前类的类函数
                 kwargs={
                     "flask_app": current_app._get_current_object(),  # type: ignore
                     "dataset_id": dataset_id,
@@ -159,7 +159,7 @@ class RetrievalService:
                 if not dataset:
                     raise ValueError("dataset not found")
 
-                # cdg:创建关键词实例
+                # cdg:创建关键词实例(关键词库)
                 keyword = Keyword(dataset=dataset)
 
                 # cdg:执行关键词检索
@@ -189,10 +189,10 @@ class RetrievalService:
                 if not dataset:
                     raise ValueError("dataset not found")
 
-                # 创建向量检索实例
+                # cdg:创建向量检索实例（向量库实例）
                 vector = Vector(dataset=dataset)
 
-                # 执行向量召回
+                # cdg:执行向量召回
                 documents = vector.search_by_vector(
                     cls.escape_query_for_search(query),
                     search_type="similarity_score_threshold",
@@ -293,7 +293,9 @@ class RetrievalService:
             dataset_document = db.session.query(DatasetDocument).filter(DatasetDocument.id == document_id).first()
             if dataset_document:
                 if dataset_document.doc_form == IndexType.PARENT_CHILD_INDEX:
+                    # cdg:父子分段模式下，一个doc_id标识一个子段，一个segment_id标识一个父段
                     child_index_node_id = document.metadata.get("doc_id")
+                    # cdg:父段和字段的关系保存在ChildChunk表中，ChildChunk包含segment_id和child_index_node_id（即doc_id），父段信息包含在DocumentSegment表中
                     result = (
                         db.session.query(ChildChunk, DocumentSegment)
                         .join(DocumentSegment, ChildChunk.segment_id == DocumentSegment.id)
@@ -309,6 +311,7 @@ class RetrievalService:
                         child_chunk, segment = result
                         if not segment:
                             continue
+                        # cdg:构建RetrievalSegments的实例（此处用record）
                         if segment.id not in include_segment_ids:
                             include_segment_ids.append(segment.id)
                             child_chunk_detail = {
@@ -340,8 +343,10 @@ class RetrievalService:
                     else:
                         continue
                 else:
+                    # cdg:非父子分段模式下，一个doc_id标识一个segment
                     index_node_id = document.metadata["doc_id"]
 
+                    # cdg:从数据库中获取segment的完整信息，而不是从向量库的召回结果中读取每个segment的元数据metadata.
                     segment = (
                         db.session.query(DocumentSegment)
                         .filter(
@@ -363,8 +368,10 @@ class RetrievalService:
 
                     records.append(record)
             for record in records:
+                # cdg:父子分段模式下，获取父段的score，父段的score取决于字段score的最大值
                 if record["segment"].id in segment_child_map:
                     record["child_chunks"] = segment_child_map[record["segment"].id].get("child_chunks", None)
                     record["score"] = segment_child_map[record["segment"].id]["max_score"]
 
+        # cdg:record是字典格式，需要转为RetrievalSegments对象格式
         return [RetrievalSegments(**record) for record in records]

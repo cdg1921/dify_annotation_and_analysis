@@ -217,6 +217,7 @@ class DatasetRetrieval:
                             else:
                                 source["content"] = segment.content
                             retrieval_resource_list.append(source)
+        # cdg:不同segment（父段）的位置由最大的子段的score决定，子段score越大，父段排序越靠前
         if hit_callback and retrieval_resource_list:
             retrieval_resource_list = sorted(retrieval_resource_list, key=lambda x: x.get("score") or 0.0, reverse=True)
             for position, item in enumerate(retrieval_resource_list, start=1):
