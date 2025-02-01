@@ -127,6 +127,7 @@ class ChromaVector(BaseVector):
         return []
 
 
+# cdg:每个供应商除了需要基础BaseVector类实现独立的供应商类（如ChromaVector），还要相应地定义一个Factory类（如ChromaVectorFactory），以对外提供向量库服务
 class ChromaVectorFactory(AbstractVectorFactory):
     def init_vector(self, dataset: Dataset, attributes: list, embeddings: Embeddings) -> BaseVector:
         if dataset.index_struct_dict:

@@ -55,6 +55,7 @@ class Vector:
         vector_factory_cls = self.get_vector_factory(vector_type)
         return vector_factory_cls().init_vector(self._dataset, self._attributes, self._embeddings)
 
+    # cdg:DIFY确定向量库供应商的方式与确定模型供应商的方式不一样，前者以match的方式指定，后者以读取本地配置文件的方式实现。
     @staticmethod
     def get_vector_factory(vector_type: str) -> type[AbstractVectorFactory]:
         match vector_type:
