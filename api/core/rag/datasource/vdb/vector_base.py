@@ -6,7 +6,7 @@ from typing import Any
 from core.rag.models.document import Document
 
 # cdg:向量库供应商基础类，在BaseVector是一个抽象类，只定义了部分基础操作（函数），具体实现需在每个向量库供应商的类中实现
-# cdg:例如：ChromaVector -> BaseVector
+# cdg:例如：ChromaVector -> BaseVector，具体在api/core/rag/datasource/vdb路径下
 class BaseVector(ABC):
     def __init__(self, collection_name: str):
         self._collection_name = collection_name
