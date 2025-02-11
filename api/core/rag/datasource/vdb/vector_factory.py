@@ -58,6 +58,7 @@ class Vector:
     # cdg:DIFY确定向量库供应商的方式与确定模型供应商的方式不一样，前者以match的方式指定，后者以读取本地配置文件的方式实现。
     @staticmethod
     def get_vector_factory(vector_type: str) -> type[AbstractVectorFactory]:
+        # cdg:DIFY在确定向量库供应商时，采用match的方式，而不是读取本地配置文件。
         match vector_type:
             case VectorType.CHROMA:
                 from core.rag.datasource.vdb.chroma.chroma_vector import ChromaVectorFactory
@@ -164,10 +165,11 @@ class Vector:
         if kwargs.get("duplicate_check", False):
             documents = self._filter_duplicate_texts(documents)
 
-        #cdg:
+        #cdg:将每个文本块向量化并加入到数据库中
         embeddings = self._embeddings.embed_documents([document.page_content for document in documents])
         self._vector_processor.create(texts=documents, embeddings=embeddings, **kwargs)
 
+    # cdg:如果文本块已经存在，则不重复加入数据库
     def text_exists(self, id: str) -> bool:
         return self._vector_processor.text_exists(id)
 
