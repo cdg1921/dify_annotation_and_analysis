@@ -13,7 +13,7 @@ from extensions.ext_database import db
 from extensions.ext_redis import redis_client
 from models.dataset import Dataset, Whitelist
 
-
+# cdg:AbstractVectorFactory类是一个抽象工厂，用于创建各种类型的向量存储。
 class AbstractVectorFactory(ABC):
     @abstractmethod
     def init_vector(self, dataset: Dataset, attributes: list, embeddings: Embeddings) -> BaseVector:
@@ -25,6 +25,7 @@ class AbstractVectorFactory(ABC):
         return index_struct_dict
 
 
+# cdg:在Vector类中，_init_vector方法用于初始化向量存储，根据指定的向量存储类型，选择对应的向量存储工厂，并调用其init_vector方法创建向量存储实例。
 class Vector:
     def __init__(self, dataset: Dataset, attributes: Optional[list] = None):
         if attributes is None:
@@ -35,11 +36,13 @@ class Vector:
         self._vector_processor = self._init_vector()
 
     def _init_vector(self) -> BaseVector:
+        # cdg:向量库的类型在配置文件中由VECTOR_STORE变量指定
         vector_type = dify_config.VECTOR_STORE
 
         if self._dataset.index_struct_dict:
             vector_type = self._dataset.index_struct_dict["type"]
         else:
+
             if dify_config.VECTOR_STORE_WHITELIST_ENABLE:
                 whitelist = (
                     db.session.query(Whitelist)

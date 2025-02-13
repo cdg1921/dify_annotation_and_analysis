@@ -18,7 +18,8 @@ from models.dataset import Embedding
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:CacheEmbedding的功能是为了避免每次都调用模型进行embedding，而是将embedding结果缓存到数据库中，
+# 然后每次调用时先从数据库中查找，如果存在则直接返回，如果不存在则调用模型进行embedding，并将结果缓存到数据库中。
 class CacheEmbedding(Embeddings):
     def __init__(self, model_instance: ModelInstance, user: Optional[str] = None) -> None:
         self._model_instance = model_instance

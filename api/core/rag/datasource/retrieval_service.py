@@ -262,10 +262,13 @@ class RetrievalService:
                         and reranking_model.get("reranking_provider_name")
                         and retrieval_method == RetrievalMethod.FULL_TEXT_SEARCH.value
                     ):
+                        # cdg:创建后处理器（Reranker处理器）
                         data_post_processor = DataPostProcessor(
                             str(dataset.tenant_id), RerankMode.RERANKING_MODEL.value, reranking_model, None, False
                         )
+                        # cdg:将重排后的结果加入all_documents中
                         all_documents.extend(
+                            # cdg:调用reranker处理器的invoke函数，该函数会调用Reranker处理器的rerank函数，rerank函数会调用Reranker处理器的rerank_by_model函数
                             data_post_processor.invoke(
                                 query=query,
                                 documents=documents,
@@ -367,6 +370,7 @@ class RetrievalService:
                     }
 
                     records.append(record)
+            # cdg:非父子分段模式下，获取segment的score
             for record in records:
                 # cdg:父子分段模式下，获取父段的score，父段的score取决于字段score的最大值
                 if record["segment"].id in segment_child_map:
