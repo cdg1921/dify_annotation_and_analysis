@@ -174,6 +174,7 @@ class AppRunner:
         """
         # get prompt without memory and context
         # cdg:SIMPLE类型的Prompt与advanced类型的Prompt差异主要在于是否有历史消息。SimplePromptTransform 和 AdvancedPromptTransform 的主要区别在于功能复杂度、提示模板解析能力、历史对话管理机制、扩展性和灵活性以及适用的应用场景。SimplePromptTransform 适合处理简单的提示生成任务，而 AdvancedPromptTransform 则提供了更强大的功能和灵活性，适用于更复杂的对话管理和提示定制需求。
+        # cdg:AdvancedPromptTransform用于工作流或者Agent场景，SimplePromptTransform用于一般聊天对话或者补全场景
         if prompt_template_entity.prompt_type == PromptTemplateEntity.PromptType.SIMPLE:
             # cdg:prompt_transform只能是SimplePromptTransform或AdvancedPromptTransform的实例，所以这里进行类型声明。
             prompt_transform: Union[SimplePromptTransform, AdvancedPromptTransform]
