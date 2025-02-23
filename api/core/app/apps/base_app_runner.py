@@ -29,7 +29,7 @@ from models.model import App, AppMode, Message, MessageAnnotation
 if TYPE_CHECKING:
     from core.file.models import File
 
-# cdg:基础应用执行器
+# cdg:基础应用执行器，主要功能包括获取模型配置、获取模型实例、获取提示词、获取模型支持的上下文长度、获取max_tokens、计算可用token长度、重新计算max_tokens长度等
 class AppRunner:
     def get_pre_calculate_rest_tokens(
         self,
@@ -63,7 +63,7 @@ class AppRunner:
         # cdg:获取模型支持的上下文长度
         model_context_tokens = model_config.model_schema.model_properties.get(ModelPropertyKey.CONTEXT_SIZE)
 
-        # cdg:获取max_tokens
+        # cdg:获取max_tokens，根据参数规则获取max_tokens
         max_tokens = 0
         for parameter_rule in model_config.model_schema.parameter_rules:
             if parameter_rule.name == "max_tokens" or (
@@ -94,7 +94,8 @@ class AppRunner:
         # cdg:获取提示词token长度
         prompt_tokens = model_instance.get_llm_num_tokens(prompt_messages)
 
-        # cdg:计算剩余token长度
+        # cdg:计算剩余token长度，将model_context_tokens减去prompt_tokens和prompt_tokens，如果小于0，则抛出异常。
+        # 也就是说prompt_tokens的长度不能超过model_context_tokens和max_tokens的差值，需要对提示词的长度进行裁剪。
         rest_tokens: int = model_context_tokens - max_tokens - prompt_tokens
         if rest_tokens < 0:
             raise InvokeBadRequestError(
@@ -146,6 +147,8 @@ class AppRunner:
                 ):
                     model_config.parameters[parameter_rule.name] = max_tokens
 
+    # cdg:构建提示词消息，将提示词消息组织成PromptMessage对象，并返回一个元组，其中包含PromptMessage对象列表和停止标记列表。
+    # cdg:提示词包含了用户输入的query、prompt_template、文件、query_prefix、query_suffix、context、memory等信息
     def organize_prompt_messages(
         self,
         app_record: App,
@@ -159,7 +162,6 @@ class AppRunner:
     ) -> tuple[list[PromptMessage], Optional[list[str]]]:
         """
         Organize prompt messages
-        # cdg:构建提示词消息
         :param context:
         :param app_record: app record
         :param model_config: model config entity
@@ -171,9 +173,12 @@ class AppRunner:
         :return:
         """
         # get prompt without memory and context
-        # cdg:SIMPLE类型的Prompt与advanced类型的Prompt差异主要在于是否有历史消息
+        # cdg:SIMPLE类型的Prompt与advanced类型的Prompt差异主要在于是否有历史消息。SimplePromptTransform 和 AdvancedPromptTransform 的主要区别在于功能复杂度、提示模板解析能力、历史对话管理机制、扩展性和灵活性以及适用的应用场景。SimplePromptTransform 适合处理简单的提示生成任务，而 AdvancedPromptTransform 则提供了更强大的功能和灵活性，适用于更复杂的对话管理和提示定制需求。
         if prompt_template_entity.prompt_type == PromptTemplateEntity.PromptType.SIMPLE:
+            # cdg:prompt_transform只能是SimplePromptTransform或AdvancedPromptTransform的实例，所以这里进行类型声明。
             prompt_transform: Union[SimplePromptTransform, AdvancedPromptTransform]
+            # cdg:创建一个SimplePromptTransform对象，并调用get_prompt方法，传入参数，获取提示词消息和停止标记。
+            # cdg:SimplePromptTransform主要实现了根据用户输入（如query、input、files）,从供应商的prompt模板中生成提示词消息。供应商的prompt模板从本地文件中加载。
             prompt_transform = SimplePromptTransform()
             prompt_messages, stop = prompt_transform.get_prompt(
                 app_mode=AppMode.value_of(app_record.mode),
@@ -189,7 +194,10 @@ class AppRunner:
             memory_config = MemoryConfig(window=MemoryConfig.WindowConfig(enabled=False))
 
             model_mode = ModelMode.value_of(model_config.mode)
+            # cdg:定义prompt_template变量，指定prompt_template的类型，CompletionModelPromptTemplate中不包含role，ChatModelMessage中包含role
+            # cdg:CompletionModelPromptTemplate用于completion场景，无role。ChatModelMessage用于chat场景，需要包含role。
             prompt_template: Union[CompletionModelPromptTemplate, list[ChatModelMessage]]
+            # cdg:根据模型模式，创建一个AdvancedPromptTransform对象，并调用get_prompt方法，实例化prompt_template
             if model_mode == ModelMode.COMPLETION:
                 advanced_completion_prompt_template = prompt_template_entity.advanced_completion_prompt_template
                 if not advanced_completion_prompt_template:

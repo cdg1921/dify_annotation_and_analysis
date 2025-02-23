@@ -64,6 +64,7 @@ class SimplePromptTransform(PromptTransform):
         inputs = {key: str(value) for key, value in inputs.items()}
 
         model_mode = ModelMode.value_of(model_config.mode)
+        # cdg:两种模式，chat和completion下的提示词模板
         if model_mode == ModelMode.CHAT:
             prompt_messages, stops = self._get_chat_model_prompt_messages(
                 app_mode=app_mode,
@@ -110,6 +111,7 @@ class SimplePromptTransform(PromptTransform):
             with_memory_prompt=histories is not None,
         )
 
+        # cdg:用户输入的变量中哪些是用于构建提示词的变量，比如#query#, #context#, #histories#
         variables = {k: inputs[k] for k in prompt_template_config["custom_variable_keys"] if k in inputs}
 
         for v in prompt_template_config["special_variable_keys"]:
@@ -121,6 +123,7 @@ class SimplePromptTransform(PromptTransform):
             elif v == "#histories#":
                 variables["#histories#"] = histories or ""
 
+        # cdg:根据提示词模板配置字典中获取提示词模板，然后将变量替换到提示词模板中，得到最终的提示词
         prompt_template = prompt_template_config["prompt_template"]
         prompt = prompt_template.format(variables)
 
@@ -136,6 +139,7 @@ class SimplePromptTransform(PromptTransform):
         query_in_prompt: bool,
         with_memory_prompt: bool = False,
     ) -> dict:
+        # cdg:根据模型配置获取提示词模板配置,读指定供应商的模型配置文件，获取提示词模板配置
         prompt_rules = self._get_prompt_rule(app_mode=app_mode, provider=provider, model=model)
 
         custom_variable_keys = []
@@ -265,6 +269,7 @@ class SimplePromptTransform(PromptTransform):
         return [self.get_last_user_message(prompt, files)], stops
 
     def get_last_user_message(self, prompt: str, files: Sequence["File"]) -> UserPromptMessage:
+        # cdg:如果文件不为空，则将文件转换为PromptMessageContent，并添加到prompt_message_contents中，最后将prompt_message_contents转换为UserPromptMessage，并返回。
         if files:
             prompt_message_contents: list[PromptMessageContent] = []
             prompt_message_contents.append(TextPromptMessageContent(data=prompt))
@@ -285,6 +290,7 @@ class SimplePromptTransform(PromptTransform):
         :param model: model name
         :return:
         """
+        # cdg:从供应商的prompt文件中获取prompt规则文件名
         prompt_file_name = self._prompt_file_name(app_mode=app_mode, provider=provider, model=model)
 
         # Check if the prompt file is already loaded

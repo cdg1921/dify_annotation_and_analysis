@@ -8,12 +8,23 @@ from core.model_runtime.entities.llm_entities import LLMResultChunk
 
 # cdg:解析COT输出
 class CotAgentOutputParser:
-    @classmethod
+    @classmethodL
     def handle_react_stream_output(
-        cls, llm_response: Generator[LLMResultChunk, None, None], usage_dict: dict
+            cls, llm_response: Generator[LLMResultChunk, None, None], usage_dict: dict
     ) -> Generator[Union[str, AgentScratchpadUnit.Action], None, None]:
         def parse_action(json_str):
+            """
+            解析给定的JSON字符串，提取动作名称和输入。
+
+            参数:
+            json_str (str): 包含动作信息的JSON字符串。
+
+            返回:
+            AgentScratchpadUnit.Action 或 str: 如果成功解析动作名称和输入，则返回相应的AgentScratchpadUnit.Action对象；
+            否则返回原始的JSON字符串。
+            """
             try:
+                # cdg:尝试解析JSON字符串，允许非严格的JSON格式
                 action = json.loads(json_str, strict=False)
                 action_name = None
                 action_input = None
@@ -22,6 +33,7 @@ class CotAgentOutputParser:
                 if isinstance(action, list) and len(action) == 1:
                     action = action[0]
 
+                # cdg:遍历动作字典，寻找动作名称和动作输入
                 for key, value in action.items():
                     if "input" in key.lower():
                         action_input = value
@@ -77,25 +89,30 @@ class CotAgentOutputParser:
             index = 0
             while index < len(response_content):
                 steps = 1
-                delta = response_content[index : index + steps]
+                delta = response_content[index: index + steps]
                 yield_delta = False
 
+                # cdg:判断是否是代码块的起始或结束，以"`"作为起始或结束的标识
                 if delta == "`":
                     last_character = delta
                     code_block_cache += delta
                     code_block_delimiter_count += 1
                 else:
+                    # cdg:判断是否在代码块内的内容
                     if not in_code_block:
+                        # cdg:如果不在代码块内，而且代码块的内容不为空，则将代码块的内容返回
                         if code_block_delimiter_count > 0:
                             last_character = delta
                             yield code_block_cache
                         code_block_cache = ""
                     else:
+                        # cdg:如果在代码块内，则将代码块内容添加到缓存中
                         last_character = delta
                         code_block_cache += delta
                     code_block_delimiter_count = 0
 
                 if not in_code_block and not in_json:
+                    # cdg:action开始字符串处理
                     if delta.lower() == action_str[action_idx] and action_idx == 0:
                         if last_character not in {"\n", " ", ""}:
                             yield_delta = True
@@ -108,7 +125,7 @@ class CotAgentOutputParser:
                                 action_idx = 0
                             index += steps
                             continue
-                    elif delta.lower() == action_str[action_idx] and action_idx > 0:
+                    elif delta.lower() == action_str[action_idx] and action_idx > 0:  # cdg:判断是否是action字符串
                         last_character = delta
                         action_cache += delta
                         action_idx += 1

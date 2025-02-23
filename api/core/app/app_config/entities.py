@@ -83,6 +83,7 @@ class PromptTemplateEntity(BaseModel):
             raise ValueError(f"invalid prompt type value {value}")
 
     prompt_type: PromptType
+    # cdg:simple_prompt_template、advanced_chat_prompt_template、advanced_completion_prompt_template三选一
     simple_prompt_template: Optional[str] = None   # cdg:Optional,可选，可有可无
     advanced_chat_prompt_template: Optional[AdvancedChatPromptTemplateEntity] = None
     advanced_completion_prompt_template: Optional[AdvancedCompletionPromptTemplateEntity] = None
@@ -211,15 +212,15 @@ class TracingConfigEntity(BaseModel):
 
 # cdg:工作流中“添加功能”模块支持的功能特性
 class AppAdditionalFeatures(BaseModel):
-    file_upload: Optional[FileUploadConfig] = None
-    opening_statement: Optional[str] = None
-    suggested_questions: list[str] = []
-    suggested_questions_after_answer: bool = False
-    show_retrieve_source: bool = False
-    more_like_this: bool = False
-    speech_to_text: bool = False
-    text_to_speech: Optional[TextToSpeechEntity] = None
-    trace_config: Optional[TracingConfigEntity] = None
+    file_upload: Optional[FileUploadConfig] = None           # cdg:文件上传特性
+    opening_statement: Optional[str] = None                  # cdg:开场白
+    suggested_questions: list[str] = []                      # cdg:建议问题
+    suggested_questions_after_answer: bool = False           # cdg:是否显示建议问题
+    show_retrieve_source: bool = False                       # cdg:是否显示知识库来源
+    more_like_this: bool = False                             # cdg:是否显示相关问题
+    speech_to_text: bool = False                             # cdg:是否启用语音转文字
+    text_to_speech: Optional[TextToSpeechEntity] = None      # cdg:是否启用文字转语音
+    trace_config: Optional[TracingConfigEntity] = None       # cdg:是否启用链路追踪
 
 
 class AppConfig(BaseModel):
@@ -229,8 +230,8 @@ class AppConfig(BaseModel):
 
     tenant_id: str
     app_id: str
+    # cdg:AppMode支持completion、workflow、chat、advanced-chat、agent-chat、channel
     app_mode: AppMode
-    # cdg:支持completion、workflow、chat、advanced-chat、agent-chat、channel
     additional_features: AppAdditionalFeatures
     variables: list[VariableEntity] = []
     sensitive_word_avoidance: Optional[SensitiveWordAvoidanceEntity] = None

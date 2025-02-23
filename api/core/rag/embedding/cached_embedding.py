@@ -25,6 +25,7 @@ class CacheEmbedding(Embeddings):
         self._model_instance = model_instance
         self._user = user
 
+    # cdg:对texts进行embedding，如果embedding结果已经存在，则直接返回，否则调用模型进行embedding，并将结果缓存到数据库中。
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed search docs in batches of 10."""
         # use doc embedding cache or store if not exists
