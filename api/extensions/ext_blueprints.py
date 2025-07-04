@@ -1,7 +1,7 @@
 from configs import dify_config
 from dify_app import DifyApp
 
-
+# cdg: 初始化蓝图
 def init_app(app: DifyApp):
     # register blueprint routers
 
