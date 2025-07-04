@@ -244,7 +244,7 @@ class TestCompletionClient(unittest.TestCase):
         )
         self.assertIn("answer", response.text)
 
-# cdg: 测试客户端
+
 class TestDifyClient(unittest.TestCase):
     def setUp(self):
         self.dify_client = DifyClient(API_KEY)
