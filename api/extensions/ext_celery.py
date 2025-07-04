@@ -105,6 +105,6 @@ def init_app(app: DifyApp) -> Celery:
             "schedule": crontab(minute="0", hour="10", day_of_week="1"), #cdg: 设置时间，每周一10点执行
         },
     }
-    celery_app.conf.update(beat_schedule=beat_schedule, imports=imports) #cdg: 更新beat_schedule
+    celery_app.conf.update(beat_schedule=beat_schedule, imports=imports) #cdg: 更新beat_schedule，beat_schedule即心跳调度任务
 
     return celery_app
