@@ -26,7 +26,7 @@ from models.model import Account, App, AppAnnotationSetting, AppMode, Conversati
 from models.provider import Provider, ProviderModel
 from services.account_service import RegisterService, TenantService
 
-
+# cdg:
 @click.command("reset-password", help="Reset the account password.")
 @click.option("--email", prompt=True, help="Account email to reset password for")
 @click.option("--new-password", prompt=True, help="New password")
