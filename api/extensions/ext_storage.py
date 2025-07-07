@@ -31,7 +31,7 @@ class Storage:
                 from extensions.storage.opendal_storage import OpenDALStorage
 
                 return lambda: OpenDALStorage(dify_config.OPENDAL_SCHEME)
-            case StorageType.LOCAL: # cdg: 本地存储，用于存储本地文件。
+            case StorageType.LOCAL: # cdg: 本地存储，用于存储本地文件。以前版本中为local_storage,新版本中为opendal_storage。
                 from extensions.storage.opendal_storage import OpenDALStorage
 
                 return lambda: OpenDALStorage(scheme="fs", root=dify_config.STORAGE_LOCAL_PATH)

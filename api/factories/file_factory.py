@@ -12,12 +12,12 @@ from core.helper import ssrf_proxy
 from extensions.ext_database import db
 from models import MessageFile, ToolFile, UploadFile
 
-
+# cdg: 从消息文件中构建文件
 def build_from_message_files(
     *,
     message_files: Sequence["MessageFile"],
     tenant_id: str,
-    config: FileUploadConfig,
+    config: FileUploadConfig, # cdg: 文件上传配置，包括文件保存类型、文件大小限制、文件类型限制等
 ) -> Sequence[File]:
     results = [
         build_from_message_file(message_file=file, tenant_id=tenant_id, config=config)

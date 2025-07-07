@@ -5,9 +5,9 @@ from events.message_event import message_was_created
 from extensions.ext_database import db
 from models.provider import Provider
 
-
+# cdg: 使用@message_was_created.connect装饰器，将handle函数注册为消息创建事件的处理器。
 @message_was_created.connect
-def handle(sender, **kwargs):
+def handle(sender, **kwargs): # cdg: 处理消息创建事件，sender是消息对象，kwargs是事件参数   
     message = sender
     application_generate_entity = kwargs.get("application_generate_entity")
 
