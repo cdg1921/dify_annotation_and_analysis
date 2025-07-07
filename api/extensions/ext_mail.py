@@ -94,5 +94,5 @@ def is_enabled() -> bool: # cdg: 检查邮件是否启用。
 def init_app(app: DifyApp):
     mail.init_app(app)
 
-
+# cdg: 创建邮件实例
 mail = Mail()

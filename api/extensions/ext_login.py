@@ -10,6 +10,7 @@ from dify_app import DifyApp
 from libs.passport import PassportService
 from services.account_service import AccountService
 
+# cdg: 创建Flask-Login的LoginManager实例，用于管理用户会话
 login_manager = flask_login.LoginManager()
 
 
