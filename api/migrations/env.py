@@ -13,11 +13,11 @@ config = context.config
 fileConfig(config.config_file_name)
 logger = logging.getLogger('alembic.env')
 
-
+# cdg: 获取数据库引擎
 def get_engine():
     return current_app.extensions['migrate'].db.engine
 
-
+# cdg: 获取数据库引擎URL
 def get_engine_url():
     try:
         return get_engine().url.render_as_string(hide_password=False).replace(
@@ -26,11 +26,13 @@ def get_engine_url():
         return str(get_engine().url).replace('%', '%%')
 
 
+# cdg: 设置数据库引擎URL
 # add your model's MetaData object here
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 config.set_main_option('sqlalchemy.url', get_engine_url())
+# cdg: 获取数据库引擎作为目标数据库
 target_db = current_app.extensions['migrate'].db
 
 # other values from the config, defined by the needs of env.py,
@@ -38,20 +40,20 @@ target_db = current_app.extensions['migrate'].db
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-
+# cdg: 获取数据库引擎的元数据
 def get_metadata():
     if hasattr(target_db, 'metadatas'):
         return target_db.metadatas[None]
     return target_db.metadata
 
-
+# cdg: 排除外键约束
 def include_object(object, name, type_, reflected, compare_to):
     if type_ == "foreign_key_constraint":
         return False
     else:
         return True
 
-
+# cdg: 离线模式运行迁移
 def run_migrations_offline():
     """Run migrations in 'offline' mode.
 
@@ -72,7 +74,7 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
-
+# cdg: 在线模式运行迁移
 def run_migrations_online():
     """Run migrations in 'online' mode.
 
@@ -105,7 +107,7 @@ def run_migrations_online():
         with context.begin_transaction():
             context.run_migrations()
 
-
+# cdg: 根据是否离线模式运行迁移
 if context.is_offline_mode():
     run_migrations_offline()
 else:
