@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .engine import db
 from .types import StringUUID
 
-
+# cdg: 定义AccountStatus枚举类，用于表示Account的状态。
 class AccountStatus(enum.StrEnum):
     PENDING = "pending"
     UNINITIALIZED = "uninitialized"
@@ -16,7 +16,7 @@ class AccountStatus(enum.StrEnum):
     BANNED = "banned"
     CLOSED = "closed"
 
-
+# cdg: 定义Account模型类（账户信息表），继承自UserMixin和db.Model。
 class Account(UserMixin, db.Model):  # type: ignore[name-defined]
     __tablename__ = "accounts"
     __table_args__ = (db.PrimaryKeyConstraint("id", name="account_pkey"), db.Index("account_email_idx", "email"))
@@ -38,15 +38,18 @@ class Account(UserMixin, db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
+    # cdg: 判断密码是否已设置。
     @property
     def is_password_set(self):
         return self.password is not None
 
+    # cdg: 定义current_tenant属性，用于获取当前租户。
     @property
     def current_tenant(self):
         # FIXME: fix the type error later, because the type is important maybe cause some bugs
         return self._current_tenant  # type: ignore
 
+    # cdg: 设置当前租户。
     @current_tenant.setter
     def current_tenant(self, value: "Tenant"):
         tenant = value
@@ -58,10 +61,12 @@ class Account(UserMixin, db.Model):  # type: ignore[name-defined]
             tenant = None  # type: ignore
         self._current_tenant = tenant
 
+    # cdg: 获取当前租户ID。
     @property
     def current_tenant_id(self) -> str | None:
         return self._current_tenant.id if self._current_tenant else None
 
+    # cdg: 设置当前租户ID。
     @current_tenant_id.setter
     def current_tenant_id(self, value: str):
         try:
@@ -83,14 +88,17 @@ class Account(UserMixin, db.Model):  # type: ignore[name-defined]
 
         self._current_tenant = tenant
 
+    # cdg: 获取当前租户角色。
     @property
     def current_role(self):
         return self._current_tenant.current_role
 
+    # cdg: 获取账户状态。
     def get_status(self) -> AccountStatus:
         status_str = self.status
         return AccountStatus(status_str)
 
+    # cdg: 根据提供商和OpenID获取账户。
     @classmethod
     def get_by_openid(cls, provider: str, open_id: str):
         account_integrate = (
@@ -122,12 +130,12 @@ class Account(UserMixin, db.Model):  # type: ignore[name-defined]
     def is_dataset_operator(self):
         return self._current_tenant.current_role == TenantAccountRole.DATASET_OPERATOR
 
-
+# cdg: 定义TenantStatus枚举类，用于表示Tenant的状态。
 class TenantStatus(enum.StrEnum):
     NORMAL = "normal"
     ARCHIVE = "archive"
 
-
+# cdg: 定义TenantAccountRole枚举类，用于表示TenantAccount的角色。
 class TenantAccountRole(enum.StrEnum):
     OWNER = "owner"
     ADMIN = "admin"
@@ -175,7 +183,7 @@ class TenantAccountRole(enum.StrEnum):
             TenantAccountRole.DATASET_OPERATOR,
         }
 
-
+# cdg: 定义Tenant模型类（租户信息表），继承自db.Model。
 class Tenant(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tenants"
     __table_args__ = (db.PrimaryKeyConstraint("id", name="tenant_pkey"),)
@@ -204,14 +212,14 @@ class Tenant(db.Model):  # type: ignore[name-defined]
     def custom_config_dict(self, value: dict):
         self.custom_config = json.dumps(value)
 
-
+# cdg: 定义TenantAccountJoinRole枚举类，用于表示TenantAccountJoin的角色。
 class TenantAccountJoinRole(enum.Enum):
     OWNER = "owner"
     ADMIN = "admin"
     NORMAL = "normal"
     DATASET_OPERATOR = "dataset_operator"
 
-
+# cdg: 定义TenantAccountJoin模型类（租户账户关联表），继承自db.Model。
 class TenantAccountJoin(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tenant_account_joins"
     __table_args__ = (
@@ -230,7 +238,7 @@ class TenantAccountJoin(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义AccountIntegrate模型类（账户集成表），继承自db.Model。
 class AccountIntegrate(db.Model):  # type: ignore[name-defined]
     __tablename__ = "account_integrates"
     __table_args__ = (
@@ -247,7 +255,7 @@ class AccountIntegrate(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义InvitationCode模型类（邀请码表）
 class InvitationCode(db.Model):  # type: ignore[name-defined]
     __tablename__ = "invitation_codes"
     __table_args__ = (
