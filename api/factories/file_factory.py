@@ -22,7 +22,7 @@ def build_from_message_files(
     results = [
         build_from_message_file(message_file=file, tenant_id=tenant_id, config=config)
         for file in message_files
-        if file.belongs_to != FileBelongsTo.ASSISTANT
+        if file.belongs_to != FileBelongsTo.ASSISTANT # cdg: 不从助手消息中构建文件，实际来源是用户上传的文件
     ]
     return results
 
@@ -34,11 +34,11 @@ def build_from_message_file(
     config: FileUploadConfig,
 ):
     mapping = {
-        "transfer_method": message_file.transfer_method,
-        "url": message_file.url,
-        "id": message_file.id,
-        "type": message_file.type,
-        "upload_file_id": message_file.upload_file_id,
+        "transfer_method": message_file.transfer_method, # cdg: 文件传输方式
+        "url": message_file.url, # cdg: 文件URL 
+        "id": message_file.id, # cdg: 文件ID
+        "type": message_file.type, # cdg: 文件类型
+        "upload_file_id": message_file.upload_file_id, # cdg: 文件上传ID
     }
     return build_from_mapping(
         mapping=mapping,
@@ -54,23 +54,23 @@ def build_from_mapping(
     config: FileUploadConfig | None = None,
 ) -> File:
     transfer_method = FileTransferMethod.value_of(mapping.get("transfer_method"))
-
+    # cdg: 构建文件的函数,根据文件传输方式选择不同的构建函数，包括本地文件、远程URL、工具文件。这样设计的好处是，当需要添加新的文件传输方式时，只需要添加新的构建函数，而不需要修改现有的代码。
     build_functions: dict[FileTransferMethod, Callable] = {
         FileTransferMethod.LOCAL_FILE: _build_from_local_file,
         FileTransferMethod.REMOTE_URL: _build_from_remote_url,
         FileTransferMethod.TOOL_FILE: _build_from_tool_file,
     }
-
+    # cdg: 获取构建文件的函数
     build_func = build_functions.get(transfer_method)
     if not build_func:
         raise ValueError(f"Invalid file transfer method: {transfer_method}")
-
+    # cdg: 构建文件
     file: File = build_func(
         mapping=mapping,
         tenant_id=tenant_id,
         transfer_method=transfer_method,
     )
-
+    # cdg: 验证文件
     if config and not _is_file_valid_with_config(
         input_file_type=mapping.get("type", FileType.CUSTOM),
         file_extension=file.extension or "",
@@ -78,16 +78,17 @@ def build_from_mapping(
         config=config,
     ):
         raise ValueError(f"File validation failed for file: {file.filename}")
-
+    # cdg: 返回文件
     return file
 
-
+# cdg: 从多个映射中构建文件
 def build_from_mappings(
     *,
     mappings: Sequence[Mapping[str, Any]],
     config: FileUploadConfig | None = None,
     tenant_id: str,
 ) -> Sequence[File]:
+    # cdg: 以映射列表为输入，构建多个文件，返回文件列表
     files = [
         build_from_mapping(
             mapping=mapping,
@@ -96,7 +97,7 @@ def build_from_mappings(
         )
         for mapping in mappings
     ]
-
+    # cdg: 验证文件，如果文件类型为图片，则验证图片数量是否超过最大限制
     if (
         config
         # If image config is set.
@@ -110,33 +111,35 @@ def build_from_mappings(
 
     return files
 
-
+# cdg: 从本地文件构建文件
 def _build_from_local_file(
     *,
     mapping: Mapping[str, Any],
     tenant_id: str,
     transfer_method: FileTransferMethod,
 ) -> File:
-    upload_file_id = mapping.get("upload_file_id")
-    if not upload_file_id:
+    upload_file_id = mapping.get("upload_file_id") # cdg: 获取文件上传ID
+    if not upload_file_id: # cdg: 如果文件上传ID为空，则抛出异常
         raise ValueError("Invalid upload file id")
-    # check if upload_file_id is a valid uuid
+    # cdg: 检查文件上传ID是否为有效的UUID，如果无效，则抛出异常
     try:
         uuid.UUID(upload_file_id)
     except ValueError:
-        raise ValueError("Invalid upload file id format")
+        raise ValueError("Invalid upload file id format")  
+    # cdg: 查询文件上传文件，如果文件不存在，则抛出异常
     stmt = select(UploadFile).where(
         UploadFile.id == upload_file_id,
         UploadFile.tenant_id == tenant_id,
     )
-
+    # cdg: 查询文件上传文件，如果文件不存在，则抛出异常
     row = db.session.scalar(stmt)
-    if row is None:
+    if row is None: # cdg: 如果文件不存在，则抛出异常
         raise ValueError("Invalid upload file")
-
+    # cdg: 获取文件类型
     file_type = FileType(mapping.get("type", "custom"))
+    # cdg: 标准化文件类型
     file_type = _standardize_file_type(file_type, extension="." + row.extension, mime_type=row.mime_type)
-
+    # cdg: 构建文件对象
     return File(
         id=mapping.get("id"),
         filename=row.name,
@@ -151,7 +154,7 @@ def _build_from_local_file(
         storage_key=row.key,
     )
 
-
+# cdg: 从远程URL构建文件
 def _build_from_remote_url(
     *,
     mapping: Mapping[str, Any],
@@ -181,7 +184,7 @@ def _build_from_remote_url(
         storage_key="",
     )
 
-
+# cdg: 获取远程文件信息
 def _get_remote_file_info(url: str):
     file_size = -1
     filename = url.split("/")[-1].split("?")[0] or "unknown_file"
@@ -197,13 +200,14 @@ def _get_remote_file_info(url: str):
 
     return mime_type, filename, file_size
 
-
+# cdg: 从工具文件构建文件
 def _build_from_tool_file(
     *,
     mapping: Mapping[str, Any],
     tenant_id: str,
     transfer_method: FileTransferMethod,
 ) -> File:
+    # cdg: 查询工具文件，如果文件不存在，则抛出异常
     tool_file = (
         db.session.query(ToolFile)
         .filter(
@@ -216,10 +220,13 @@ def _build_from_tool_file(
     if tool_file is None:
         raise ValueError(f"ToolFile {mapping.get('tool_file_id')} not found")
 
+    # cdg: 获取文件扩展名
     extension = "." + tool_file.file_key.split(".")[-1] if "." in tool_file.file_key else ".bin"
+    # cdg: 获取文件类型
     file_type = FileType(mapping.get("type", "custom"))
+    # cdg: 标准化文件类型
     file_type = _standardize_file_type(file_type, extension=extension, mime_type=tool_file.mimetype)
-
+    # cdg: 构建文件对象
     return File(
         id=mapping.get("id"),
         tenant_id=tenant_id,
@@ -234,7 +241,7 @@ def _build_from_tool_file(
         storage_key=tool_file.file_key,
     )
 
-
+# cdg: 验证文件是否符合配置
 def _is_file_valid_with_config(
     *,
     input_file_type: str,
@@ -248,25 +255,26 @@ def _is_file_valid_with_config(
         and input_file_type != FileType.CUSTOM
     ):
         return False
-
+    # cdg: 验证文件类型是否符合配置，具体来说，如果文件类型为自定义，则验证文件扩展名是否符合配置
     if (
         input_file_type == FileType.CUSTOM
         and config.allowed_file_extensions is not None
         and file_extension not in config.allowed_file_extensions
     ):
         return False
-
+    # cdg: 验证文件类型是否符合配置，具体来说，如果文件类型为图片，则验证文件传输方式是否符合配置
     if input_file_type == FileType.IMAGE and config.image_config:
         if config.image_config.transfer_methods and file_transfer_method not in config.image_config.transfer_methods:
             return False
 
     return True
 
-
+# cdg: 标准化文件类型
 def _standardize_file_type(file_type: FileType, /, *, extension: str = "", mime_type: str = "") -> FileType:
     """
     If custom type, try to guess the file type by extension and mime_type.
     """
+    # cdg: 如果文件类型为自定义，则根据文件扩展名和MIME类型猜测文件类型，如果猜测失败，则返回自定义类型# 
     if file_type != FileType.CUSTOM:
         return FileType(file_type)
     guessed_type = None
@@ -276,7 +284,7 @@ def _standardize_file_type(file_type: FileType, /, *, extension: str = "", mime_
         guessed_type = _get_file_type_by_mimetype(mime_type)
     return guessed_type or FileType.CUSTOM
 
-
+# cdg: 根据文件扩展名获取文件类型
 def _get_file_type_by_extension(extension: str) -> FileType | None:
     extension = extension.lstrip(".")
     if extension in IMAGE_EXTENSIONS:
@@ -289,7 +297,7 @@ def _get_file_type_by_extension(extension: str) -> FileType | None:
         return FileType.DOCUMENT
     return None
 
-
+# cdg: 根据MIME类型获取文件类型
 def _get_file_type_by_mimetype(mime_type: str) -> FileType | None:
     if "image" in mime_type:
         file_type = FileType.IMAGE

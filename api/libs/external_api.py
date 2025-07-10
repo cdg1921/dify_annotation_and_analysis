@@ -9,7 +9,7 @@ from werkzeug.exceptions import HTTPException
 
 from core.errors.error import AppInvokeQuotaExceededError
 
-
+# cdg: 定义外部API类，继承自flask_restful的Api类，重写handle_error方法，丰富Flask响应错误处理方式
 class ExternalApi(Api):
     def handle_error(self, e):
         """Error handler for the API transforms a raised exception into a Flask
