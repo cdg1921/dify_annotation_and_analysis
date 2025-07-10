@@ -30,7 +30,7 @@ class DatasetPermissionEnum(enum.StrEnum):
     ALL_TEAM = "all_team_members"
     PARTIAL_TEAM = "partial_members"
 
-
+# cdg: 定义Dataset模型类（数据集信息表）,一个知识库对一个Dataset，一个Dataset对多个Document，一个Document对多个DocumentSegment。
 class Dataset(db.Model):  # type: ignore[name-defined]
     __tablename__ = "datasets"
     __table_args__ = (
@@ -146,6 +146,7 @@ class Dataset(db.Model):  # type: ignore[name-defined]
             return document.doc_form
         return None
 
+    # cdg: 获取检索配置。
     @property
     def retrieval_model_dict(self):
         default_retrieval_model = {
@@ -201,7 +202,7 @@ class Dataset(db.Model):  # type: ignore[name-defined]
         normalized_dataset_id = dataset_id.replace("-", "_")
         return f"Vector_index_{normalized_dataset_id}_Node"
 
-
+# cdg: 定义DatasetProcessRule模型类（数据集处理规则表）
 class DatasetProcessRule(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_process_rules"
     __table_args__ = (
@@ -241,7 +242,7 @@ class DatasetProcessRule(db.Model):  # type: ignore[name-defined]
         except JSONDecodeError:
             return None
 
-
+# cdg: 定义Document模型类（文档信息表）
 class Document(db.Model):  # type: ignore[name-defined]
     __tablename__ = "documents"
     __table_args__ = (
@@ -497,7 +498,7 @@ class Document(db.Model):  # type: ignore[name-defined]
             doc_language=data.get("doc_language"),
         )
 
-
+# cdg: 定义DocumentSegment模型类（文档段落信息表）,一个Document对多个DocumentSegment。
 class DocumentSegment(db.Model):  # type: ignore[name-defined]
     __tablename__ = "document_segments"
     __table_args__ = (
@@ -627,7 +628,7 @@ class DocumentSegment(db.Model):  # type: ignore[name-defined]
 
         return text
 
-
+# cdg: 定义ChildChunk模型类（子段落信息表）
 class ChildChunk(db.Model):  # type: ignore[name-defined]
     __tablename__ = "child_chunks"
     __table_args__ = (
@@ -668,7 +669,7 @@ class ChildChunk(db.Model):  # type: ignore[name-defined]
     def segment(self):
         return db.session.query(DocumentSegment).filter(DocumentSegment.id == self.segment_id).first()
 
-
+# cdg: 定义AppDatasetJoin模型类（应用数据集关联表）
 class AppDatasetJoin(db.Model):  # type: ignore[name-defined]
     __tablename__ = "app_dataset_joins"
     __table_args__ = (
@@ -685,7 +686,7 @@ class AppDatasetJoin(db.Model):  # type: ignore[name-defined]
     def app(self):
         return db.session.get(App, self.app_id)
 
-
+# cdg: 定义DatasetQuery模型类（数据集查询表）
 class DatasetQuery(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_queries"
     __table_args__ = (
@@ -702,7 +703,7 @@ class DatasetQuery(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
 
-
+# cdg: 定义DatasetKeywordTable模型类（数据集关键词表）
 class DatasetKeywordTable(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_keyword_tables"
     __table_args__ = (
@@ -747,7 +748,7 @@ class DatasetKeywordTable(db.Model):  # type: ignore[name-defined]
                 logging.exception(f"Failed to load keyword table from file: {file_key}")
                 return None
 
-
+# cdg: 定义Embedding模型类（嵌入表）
 class Embedding(db.Model):  # type: ignore[name-defined]
     __tablename__ = "embeddings"
     __table_args__ = (
@@ -786,7 +787,7 @@ class DatasetCollectionBinding(db.Model):  # type: ignore[name-defined]
     collection_name = db.Column(db.String(64), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义TidbAuthBinding模型类（TiDB认证绑定表）
 class TidbAuthBinding(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tidb_auth_bindings"
     __table_args__ = (
@@ -806,7 +807,7 @@ class TidbAuthBinding(db.Model):  # type: ignore[name-defined]
     password = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义Whitelist模型类（白名单表）
 class Whitelist(db.Model):  # type: ignore[name-defined]
     __tablename__ = "whitelists"
     __table_args__ = (
@@ -818,7 +819,7 @@ class Whitelist(db.Model):  # type: ignore[name-defined]
     category = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义DatasetPermission模型类（数据集权限表）
 class DatasetPermission(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_permissions"
     __table_args__ = (
@@ -835,7 +836,7 @@ class DatasetPermission(db.Model):  # type: ignore[name-defined]
     has_permission = db.Column(db.Boolean, nullable=False, server_default=db.text("true"))
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义ExternalKnowledgeApis模型类（外部知识API表）
 class ExternalKnowledgeApis(db.Model):  # type: ignore[name-defined]
     __tablename__ = "external_knowledge_apis"
     __table_args__ = (
@@ -909,7 +910,7 @@ class ExternalKnowledgeBindings(db.Model):  # type: ignore[name-defined]
     updated_by = db.Column(StringUUID, nullable=True)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义DatasetAutoDisableLog模型类（数据集自动禁用日志表）
 class DatasetAutoDisableLog(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_auto_disable_logs"
     __table_args__ = (
