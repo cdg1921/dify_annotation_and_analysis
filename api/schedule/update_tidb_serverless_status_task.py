@@ -7,7 +7,7 @@ from configs import dify_config
 from core.rag.datasource.vdb.tidb_on_qdrant.tidb_service import TidbService
 from models.dataset import TidbAuthBinding
 
-
+# cdg: 定义update_tidb_serverless_status_task任务，用于更新TiDB Serverless集群状态。
 @app.celery.task(queue="dataset")
 def update_tidb_serverless_status_task():
     click.echo(click.style("Update tidb serverless status task.", fg="green"))

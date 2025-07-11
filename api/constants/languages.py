@@ -1,3 +1,4 @@
+# cdg: 语言时区映射，用于将语言转换为时区
 language_timezone_mapping = {
     "en-US": "America/New_York",
     "zh-Hans": "Asia/Shanghai",
@@ -23,7 +24,7 @@ language_timezone_mapping = {
 
 languages = list(language_timezone_mapping.keys())
 
-
+# cdg: 支持的语言，用于验证语言是否合法
 def supported_language(lang):
     if lang in languages:
         return lang

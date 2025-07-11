@@ -27,7 +27,7 @@ from .types import StringUUID
 if TYPE_CHECKING:
     from .workflow import Workflow
 
-
+# cdg: 定义DifySetup模型，安装配置信息，包括版本号和安装时间。
 class DifySetup(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dify_setups"
     __table_args__ = (db.PrimaryKeyConstraint("version", name="dify_setup_pkey"),)
@@ -35,14 +35,14 @@ class DifySetup(db.Model):  # type: ignore[name-defined]
     version = db.Column(db.String(255), nullable=False)
     setup_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义AppMode枚举，表示应用模式，包括completion、workflow、chat、advanced-chat、agent-chat、channel。
 class AppMode(StrEnum):
-    COMPLETION = "completion"
-    WORKFLOW = "workflow"
-    CHAT = "chat"
-    ADVANCED_CHAT = "advanced-chat"
-    AGENT_CHAT = "agent-chat"
-    CHANNEL = "channel"
+    COMPLETION = "completion"  # cdg: 文本补全模式
+    WORKFLOW = "workflow"  # cdg: 工作流模式
+    CHAT = "chat"  # cdg: 聊天模式
+    ADVANCED_CHAT = "advanced-chat"  # cdg: 高级聊天模式
+    AGENT_CHAT = "agent-chat"  # cdg: 智能体聊天模式
+    CHANNEL = "channel"  # cdg: 渠道模式
 
     @classmethod
     def value_of(cls, value: str) -> "AppMode":
@@ -62,7 +62,7 @@ class IconType(Enum):
     IMAGE = "image"
     EMOJI = "emoji"
 
-
+# cdg: 定义App模型，application应用信息表
 class App(db.Model):  # type: ignore[name-defined]
     __tablename__ = "apps"
     __table_args__ = (db.PrimaryKeyConstraint("id", name="app_pkey"), db.Index("app_tenant_id_idx", "tenant_id"))
@@ -103,7 +103,7 @@ class App(db.Model):  # type: ignore[name-defined]
                 return app_model_config.pre_prompt
             else:
                 return ""
-
+    # cdg: 定义site模型，site站点信息表，用于存储站点信息，包括站点名称、站点描述、站点URL等。
     @property
     def site(self):
         site = db.session.query(Site).filter(Site.app_id == self.id).first()
@@ -156,6 +156,7 @@ class App(db.Model):  # type: ignore[name-defined]
 
         return str(self.mode)
 
+    # cdg: 定义deleted_tools属性，用于获取已删除的工具。
     @property
     def deleted_tools(self) -> list:
         # get agent mode tools
@@ -261,10 +262,12 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
     def model_dict(self) -> dict:
         return json.loads(self.model) if self.model else {}
 
+    # cdg: 定义suggested_questions_list属性，用于获取建议问题列表。
     @property
     def suggested_questions_list(self) -> list:
         return json.loads(self.suggested_questions) if self.suggested_questions else []
 
+    # cdg: 定义suggested_questions_after_answer_dict属性，用于获取建议问题列表。
     @property
     def suggested_questions_after_answer_dict(self) -> dict:
         return (
@@ -305,6 +308,7 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
         else:
             return {"enabled": False}
 
+    # cdg: 定义more_like_this_dict属性，用于获取相似问题列表。
     @property
     def more_like_this_dict(self) -> dict:
         return json.loads(self.more_like_this) if self.more_like_this else {"enabled": False}
@@ -465,7 +469,7 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
 
         return new_app_model_config
 
-
+# cdg: 定义RecommendedApp模型，推荐应用信息表，用于存储推荐应用信息，包括应用ID、应用描述、应用版权、应用隐私政策、应用分类、应用位置、应用是否列出、应用安装数量、应用语言、应用创建时间、应用更新时间。
 class RecommendedApp(db.Model):  # type: ignore[name-defined]
     __tablename__ = "recommended_apps"
     __table_args__ = (
@@ -522,7 +526,7 @@ class InstalledApp(db.Model):  # type: ignore[name-defined]
         tenant = db.session.query(Tenant).filter(Tenant.id == self.tenant_id).first()
         return tenant
 
-
+# cdg: 定义Conversation模型，会话信息表，用于存储会话信息，包括会话ID、应用ID、应用模型配置ID、模型提供者、覆盖模型配置、模型ID、模式、名称、摘要、输入、介绍、系统指令、系统指令令牌数、状态、调用来源、调用结束用户ID、调用账户ID、阅读时间、阅读账户ID、对话次数、创建时间、更新时间。
 class Conversation(db.Model):  # type: ignore[name-defined]
     __tablename__ = "conversations"
     __table_args__ = (
@@ -757,7 +761,7 @@ class Conversation(db.Model):  # type: ignore[name-defined]
     def in_debug_mode(self):
         return self.override_model_configs is not None
 
-
+# cdg: 定义Message模型，消息信息表，用于存储消息信息，包括消息ID、应用ID、模型提供者、模型ID、覆盖模型配置、会话ID、输入、查询、消息、消息令牌数、消息单价、消息总价、货币、状态、错误、消息元数据、调用来源、调用结束用户ID、调用账户ID、创建时间、更新时间、是否为智能体模式、工作流运行ID。
 class Message(db.Model):  # type: ignore[name-defined]
     __tablename__ = "messages"
     __table_args__ = (
@@ -1052,6 +1056,7 @@ class Message(db.Model):  # type: ignore[name-defined]
         db.session.commit()
         return result
 
+    # cdg: 定义workflow_run属性，用于获取工作流运行信息。
     @property
     def workflow_run(self):
         if self.workflow_run_id:
@@ -1105,6 +1110,7 @@ class Message(db.Model):  # type: ignore[name-defined]
         )
 
 
+# cdg: 定义MessageFeedback模型，消息反馈信息表，用于点赞点踩场景
 class MessageFeedback(db.Model):  # type: ignore[name-defined]
     __tablename__ = "message_feedbacks"
     __table_args__ = (
@@ -1131,7 +1137,7 @@ class MessageFeedback(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.from_account_id).first()
         return account
 
-
+# cdg: 定义MessageFile模型，消息文件信息表，用于存储消息文件信息，包括文件ID、消息ID、文件类型、文件传输方式、文件URL、文件归属、文件上传ID、创建者角色、创建者ID、创建时间。
 class MessageFile(db.Model):  # type: ignore[name-defined]
     __tablename__ = "message_files"
     __table_args__ = (
@@ -1172,7 +1178,7 @@ class MessageFile(db.Model):  # type: ignore[name-defined]
     created_by: Mapped[str] = db.Column(StringUUID, nullable=False)
     created_at: Mapped[datetime] = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义MessageAnnotation模型，消息注释信息表，用于存储消息注释信息，包括注释ID、应用ID、会话ID、消息ID、问题、内容、命中次数、账户ID、创建时间、更新时间。
 class MessageAnnotation(db.Model):  # type: ignore[name-defined]
     __tablename__ = "message_annotations"
     __table_args__ = (
@@ -1203,7 +1209,7 @@ class MessageAnnotation(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.account_id).first()
         return account
 
-
+# cdg: 定义AppAnnotationHitHistory模型，应用注释命中历史信息表，用于存储应用注释命中历史信息，包括命中历史ID、应用ID、注释ID、来源、问题、账户ID、创建时间、得分、消息ID、注释问题、注释内容。
 class AppAnnotationHitHistory(db.Model):  # type: ignore[name-defined]
     __tablename__ = "app_annotation_hit_histories"
     __table_args__ = (
@@ -1241,7 +1247,7 @@ class AppAnnotationHitHistory(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.account_id).first()
         return account
 
-
+# cdg: 定义AppAnnotationSetting模型，应用注释设置信息表，用于存储应用注释设置信息，包括设置ID、应用ID、得分阈值、数据集绑定ID、创建者ID、创建时间、更新者ID、更新时间。
 class AppAnnotationSetting(db.Model):  # type: ignore[name-defined]
     __tablename__ = "app_annotation_settings"
     __table_args__ = (
@@ -1306,7 +1312,7 @@ class OperationLog(db.Model):  # type: ignore[name-defined]
     created_ip = db.Column(db.String(255), nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义EndUser模型，终端用户信息表，用于存储终端用户信息，包括用户ID、租户ID、应用ID、用户类型、外部用户ID、用户名称、是否匿名、会话ID、创建时间、更新时间。
 class EndUser(UserMixin, db.Model):  # type: ignore[name-defined]
     __tablename__ = "end_users"
     __table_args__ = (
@@ -1326,7 +1332,7 @@ class EndUser(UserMixin, db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义Site模型，站点信息表，用于存储站点信息，包括站点ID、应用ID、站点名称、图标类型、图标、图标背景、站点描述、默认语言、聊天颜色主题、聊天颜色主题反转、版权、隐私政策、是否显示工作流步骤、是否使用图标作为答案图标、自定义免责声明、自定义域、自定义令牌策略、是否公开提示、状态、创建者ID、创建时间、更新者ID、更新时间、站点代码。
 class Site(db.Model):  # type: ignore[name-defined]
     __tablename__ = "sites"
     __table_args__ = (
@@ -1383,7 +1389,7 @@ class Site(db.Model):  # type: ignore[name-defined]
     def app_base_url(self):
         return dify_config.APP_WEB_URL or request.url_root.rstrip("/")
 
-
+# cdg: 定义ApiToken模型，API令牌信息表，用于存储API令牌信息，包括令牌ID、应用ID、租户ID、令牌类型、令牌、最后使用时间、创建时间。
 class ApiToken(db.Model):  # type: ignore[name-defined]
     __tablename__ = "api_tokens"
     __table_args__ = (
@@ -1409,7 +1415,7 @@ class ApiToken(db.Model):  # type: ignore[name-defined]
                 continue
             return result
 
-
+# cdg: 定义UploadFile模型，上传文件信息表，用于存储上传文件信息，包括文件ID、租户ID、存储类型、文件键、文件名、文件大小、文件扩展名、文件MIME类型、创建者角色、创建者ID、创建时间、是否使用、使用者ID、使用时间、文件哈希、源URL。
 class UploadFile(db.Model):  # type: ignore[name-defined]
     __tablename__ = "upload_files"
     __table_args__ = (
@@ -1471,7 +1477,7 @@ class UploadFile(db.Model):  # type: ignore[name-defined]
         self.hash = hash
         self.source_url = source_url
 
-
+# cdg: 定义ApiRequest模型，API请求信息表，用于存储API请求信息，包括请求ID、租户ID、API令牌ID、请求路径、请求内容、响应内容、IP地址、创建时间。  
 class ApiRequest(db.Model):  # type: ignore[name-defined]
     __tablename__ = "api_requests"
     __table_args__ = (
@@ -1488,7 +1494,7 @@ class ApiRequest(db.Model):  # type: ignore[name-defined]
     ip = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义MessageChain模型，消息链信息表，用于存储消息链信息，包括消息链ID、消息ID、消息类型、输入、输出、创建时间。
 class MessageChain(db.Model):  # type: ignore[name-defined]
     __tablename__ = "message_chains"
     __table_args__ = (
@@ -1503,7 +1509,7 @@ class MessageChain(db.Model):  # type: ignore[name-defined]
     output = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
 
-
+# cdg: 定义MessageAgentThought模型，消息智能体思考信息表，用于存储消息智能体思考信息，包括思考ID、消息ID、消息链ID、位置、思考、工具、工具标签、工具元数据、工具输入、观察、插件ID、工具处理数据、消息、消息令牌、消息单价、消息总价、货币、延迟、创建者角色、创建者ID、创建时间。
 class MessageAgentThought(db.Model):  # type: ignore[name-defined]
     __tablename__ = "message_agent_thoughts"
     __table_args__ = (
@@ -1617,7 +1623,7 @@ class MessageAgentThought(db.Model):  # type: ignore[name-defined]
             else:
                 return {}
 
-
+# cdg: 定义DatasetRetrieverResource模型，数据集检索资源信息表，用于存储数据集检索资源信息，包括资源ID、消息ID、位置、数据集ID、数据集名称、文档ID、文档名称、数据源类型、段落ID、得分、内容、命中次数、字数、段落位置、索引节点哈希、检索来源、检索者ID、检索时间。# 
 class DatasetRetrieverResource(db.Model):  # type: ignore[name-defined]
     __tablename__ = "dataset_retriever_resources"
     __table_args__ = (
@@ -1644,7 +1650,7 @@ class DatasetRetrieverResource(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
 
-
+# cdg: 定义Tag模型，标签信息表，用于存储标签信息，包括标签ID、租户ID、标签类型、标签名称、创建者ID、创建时间。
 class Tag(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tags"
     __table_args__ = (
@@ -1662,7 +1668,7 @@ class Tag(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义TagBinding模型，标签绑定信息表，用于存储标签绑定信息，包括绑定ID、租户ID、标签ID、目标ID、创建者ID、创建时间。
 class TagBinding(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tag_bindings"
     __table_args__ = (
@@ -1678,7 +1684,7 @@ class TagBinding(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义TraceAppConfig模型，跟踪应用配置信息表，用于存储跟踪应用配置信息，包括配置ID、应用ID、跟踪提供者、跟踪配置、创建时间、更新时间、是否激活。
 class TraceAppConfig(db.Model):  # type: ignore[name-defined]
     __tablename__ = "trace_app_config"
     __table_args__ = (

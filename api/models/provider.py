@@ -1,3 +1,4 @@
+# cdg: 模型供应商管理模块相关表结构定义
 from enum import Enum
 
 from sqlalchemy import func
@@ -5,7 +6,7 @@ from sqlalchemy import func
 from .engine import db
 from .types import StringUUID
 
-
+# cdg: 定义ProviderType枚举，表示供应商类型，包括custom和system。
 class ProviderType(Enum):
     CUSTOM = "custom"
     SYSTEM = "system"
@@ -17,7 +18,7 @@ class ProviderType(Enum):
                 return member
         raise ValueError(f"No matching enum found for value '{value}'")
 
-
+# cdg: 定义ProviderQuotaType枚举，表示供应商配额类型，包括paid（付费）、free（免费）和trial（试用）。
 class ProviderQuotaType(Enum):
     PAID = "paid"
     """hosted paid quota"""
@@ -25,7 +26,7 @@ class ProviderQuotaType(Enum):
     FREE = "free"
     """third-party free quota"""
 
-    TRIAL = "trial"
+    TRIAL = "trial"#
     """hosted trial quota"""
 
     @staticmethod
@@ -35,7 +36,7 @@ class ProviderQuotaType(Enum):
                 return member
         raise ValueError(f"No matching enum found for value '{value}'")
 
-
+# cdg: 定义Provider模型，表示供应商信息，包括供应商ID、租户ID、供应商名称、供应商类型、加密配置、是否有效、最后使用时间、配额类型、配额限制、配额使用量、创建时间、更新时间。
 class Provider(db.Model):  # type: ignore[name-defined]
     """
     Provider model representing the API providers and their configurations.
@@ -65,12 +66,14 @@ class Provider(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
+    # cdg: 定义__repr__方法，用于打印供应商信息。
     def __repr__(self):
         return (
             f"<Provider(id={self.id}, tenant_id={self.tenant_id}, provider_name='{self.provider_name}',"
             f" provider_type='{self.provider_type}')>"
         )
 
+    # cdg: 定义token_is_set属性，用于判断是否设置了令牌。
     @property
     def token_is_set(self):
         """
@@ -78,6 +81,7 @@ class Provider(db.Model):  # type: ignore[name-defined]
         """
         return self.encrypted_config is not None
 
+    # cdg: 定义is_enabled属性，用于判断是否启用供应商。
     @property
     def is_enabled(self):
         """
@@ -88,7 +92,7 @@ class Provider(db.Model):  # type: ignore[name-defined]
         else:
             return self.is_valid and self.token_is_set
 
-
+# cdg: 定义ProviderModel模型，表示模型供应商信息，包括模型ID、租户ID、供应商名称、模型名称、模型类型、加密配置、是否有效、创建时间、更新时间。
 class ProviderModel(db.Model):  # type: ignore[name-defined]
     """
     Provider model representing the API provider_models and their configurations.
@@ -113,7 +117,7 @@ class ProviderModel(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义TenantDefaultModel模型，表示租户默认模型信息，包括模型ID、租户ID、供应商名称、模型名称、模型类型、创建时间、更新时间。
 class TenantDefaultModel(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tenant_default_models"
     __table_args__ = (
@@ -129,7 +133,7 @@ class TenantDefaultModel(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义TenantPreferredModelProvider模型，表示租户首选模型供应商信息，包括模型ID、租户ID、供应商名称、首选供应商类型、创建时间、更新时间。
 class TenantPreferredModelProvider(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tenant_preferred_model_providers"
     __table_args__ = (
@@ -144,7 +148,7 @@ class TenantPreferredModelProvider(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义ProviderOrder模型，表示供应商订单信息，包括订单ID、租户ID、供应商名称、账户ID、支付产品ID、支付ID、交易ID、数量、货币、总金额、支付状态、支付时间、支付失败时间、退款时间、创建时间、更新时间。
 class ProviderOrder(db.Model):  # type: ignore[name-defined]
     __tablename__ = "provider_orders"
     __table_args__ = (
@@ -169,7 +173,7 @@ class ProviderOrder(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义ProviderModelSetting模型，表示模型供应商设置信息，包括设置ID、租户ID、供应商名称、模型名称、模型类型、是否启用、负载均衡是否启用、创建时间、更新时间。
 class ProviderModelSetting(db.Model):  # type: ignore[name-defined]
     """
     Provider model settings for record the model enabled status and load balancing status.
@@ -191,7 +195,7 @@ class ProviderModelSetting(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义LoadBalancingModelConfig模型，表示负载均衡模型配置信息，包括配置ID、租户ID、供应商名称、模型名称、模型类型、名称、加密配置、是否启用、创建时间、更新时间。
 class LoadBalancingModelConfig(db.Model):  # type: ignore[name-defined]
     """
     Configurations for load balancing models.

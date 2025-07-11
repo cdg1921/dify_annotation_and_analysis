@@ -50,21 +50,24 @@ class RemoteSettingsSourceFactory(PydanticBaseSettingsSource):
 # cdg:定义一个配置 DifyConfig，用于集中管理DIFY的各种配置
 class DifyConfig(
     # Packaging info
-    PackagingInfo,
+    PackagingInfo, # cdg: 打包配置信息
     # Deployment configs
-    DeploymentConfig,
+    DeploymentConfig, # cdg: 部署配置信息
     # Feature configs
-    FeatureConfig,
+    FeatureConfig, # cdg: 功能配置信息
     # Middleware configs
-    MiddlewareConfig,
+    MiddlewareConfig, # cdg: 中间件配置信息
     # Extra service configs
-    ExtraServiceConfig,
+    ExtraServiceConfig, # cdg: 额外服务配置信息
     # Remote source configs
-    RemoteSettingsSourceConfig,
+    RemoteSettingsSourceConfig, # cdg: 远程设置源配置信息
     # Enterprise feature configs
     # **Before using, please contact business@dify.ai by email to inquire about licensing matters.**
-    EnterpriseFeatureConfig,
-):
+    EnterpriseFeatureConfig, # cdg: 企业级功能配置信息
+): 
+    # cdg:注意，DIFY对现有配置进行了分类，后续有新的配置，请添加到对应的配置类中，便于后续的维护和扩展。
+
+
     # cdg:定义类属性model_config，其值为SettingsConfigDict的实例。这个配置字典用于指定如何读取配置文件（如 .env 文件），并设置一些属性：
     model_config = SettingsConfigDict(
         # read from dotenv format config file

@@ -20,7 +20,7 @@ from models.model import (
 from models.web import SavedMessage
 from services.feature_service import FeatureService
 
-
+# cdg: 定义clean_messages任务，用于清理消息。
 @app.celery.task(queue="dataset")
 def clean_messages():
     click.echo(click.style("Start clean messages.", fg="green"))

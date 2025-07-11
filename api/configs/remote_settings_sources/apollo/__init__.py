@@ -9,7 +9,15 @@ from configs.remote_settings_sources.base import RemoteSettingsSource
 
 from .client import ApolloClient
 
+# cdg: Apollo指的是一个远程配置中心项目，常用于集中式管理应用配置。它并不是指“阿波罗登月计划”或其他通用含义，而是特指由携程开源的Apollo配置中心。
+# cdg: Apollo 配置中心是一个分布式配置管理平台，主要功能包括：
+# cdg: 集中管理应用配置：所有服务的配置都可以在 Apollo 平台上统一管理。
+# cdg: 动态推送配置变更：配置变更后可以实时推送到各个服务，无需重启应用。
+# cdg: 多环境、多集群支持：可以为不同环境（如开发、测试、生产）和不同集群管理不同的配置。
+# cdg: 权限与审计：支持配置的权限管理和变更历史审计。
 
+
+# cdg: Apollo配置信息
 class ApolloSettingsSourceInfo(BaseSettings):
     """
     Packaging build information

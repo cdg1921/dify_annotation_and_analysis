@@ -13,7 +13,7 @@ from extensions.ext_redis import redis_client
 from models.dataset import Dataset, DatasetAutoDisableLog, DatasetQuery, Document
 from services.feature_service import FeatureService
 
-
+# cdg: 定义clean_unused_datasets_task任务，用于清理未使用的数据集。
 @app.celery.task(queue="dataset")
 def clean_unused_datasets_task():
     click.echo(click.style("Start clean unused datasets indexes.", fg="green"))

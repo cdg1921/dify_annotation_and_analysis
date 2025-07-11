@@ -1,3 +1,4 @@
+# cdg: Celery异步任务相关表结构定义，实际上没有用到
 from datetime import UTC, datetime
 
 from celery import states  # type: ignore

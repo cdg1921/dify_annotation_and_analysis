@@ -3,32 +3,33 @@ from typing import Optional
 from pydantic import Field, NonNegativeInt
 from pydantic_settings import BaseSettings
 
-
+# cdg: OepnAI官方大模型远程服务配置信息
 class HostedOpenAiConfig(BaseSettings):
     """
     Configuration for hosted OpenAI service
     """
-
+    # cdg: OepnAI官方大模型远程服务OpenAI API密钥
     HOSTED_OPENAI_API_KEY: Optional[str] = Field(
         description="API key for hosted OpenAI service",
         default=None,
     )
-
+    # cdg: OepnAI官方大模型远程服务OpenAI API基础URL
     HOSTED_OPENAI_API_BASE: Optional[str] = Field(
         description="Base URL for hosted OpenAI API",
         default=None,
     )
-
+    # cdg: OepnAI官方大模型远程服务OpenAI API组织ID
     HOSTED_OPENAI_API_ORGANIZATION: Optional[str] = Field(
         description="Organization ID for hosted OpenAI service",
         default=None,
     )
-
+    # cdg: OepnAI官方大模型远程服务OpenAI试用功能是否启用
     HOSTED_OPENAI_TRIAL_ENABLED: bool = Field(
         description="Enable trial access to hosted OpenAI service",
         default=False,
     )
 
+    # cdg: OepnAI官方大模型远程服务OpenAI试用功能可用模型
     HOSTED_OPENAI_TRIAL_MODELS: str = Field(
         description="Comma-separated list of available models for trial access",
         default="gpt-3.5-turbo,"
@@ -41,16 +42,19 @@ class HostedOpenAiConfig(BaseSettings):
         "text-davinci-003",
     )
 
+    # cdg: OepnAI官方大模型远程服务OpenAI配额限制
     HOSTED_OPENAI_QUOTA_LIMIT: NonNegativeInt = Field(
         description="Quota limit for hosted OpenAI service usage",
         default=200,
     )
 
+    # cdg: OepnAI官方大模型远程服务OpenAI付费功能是否启用
     HOSTED_OPENAI_PAID_ENABLED: bool = Field(
         description="Enable paid access to hosted OpenAI service",
         default=False,
     )
 
+    # cdg: OepnAI官方大模型远程服务OpenAI付费功能可用模型
     HOSTED_OPENAI_PAID_MODELS: str = Field(
         description="Comma-separated list of available models for paid access",
         default="gpt-4,"
@@ -69,6 +73,7 @@ class HostedOpenAiConfig(BaseSettings):
     )
 
 
+# cdg: Azure OpenAI官方大模型远程服务配置信息
 class HostedAzureOpenAiConfig(BaseSettings):
     """
     Configuration for hosted Azure OpenAI service
@@ -94,7 +99,7 @@ class HostedAzureOpenAiConfig(BaseSettings):
         default=200,
     )
 
-
+# cdg: Anthropic官方大模型远程服务配置信息
 class HostedAnthropicConfig(BaseSettings):
     """
     Configuration for hosted Anthropic service
@@ -125,7 +130,7 @@ class HostedAnthropicConfig(BaseSettings):
         default=False,
     )
 
-
+# cdg: Minmax官方大模型远程服务配置信息
 class HostedMinmaxConfig(BaseSettings):
     """
     Configuration for hosted Minmax service
@@ -136,7 +141,7 @@ class HostedMinmaxConfig(BaseSettings):
         default=False,
     )
 
-
+# cdg: Spark官方大模型远程服务配置信息
 class HostedSparkConfig(BaseSettings):
     """
     Configuration for hosted Spark service
@@ -147,7 +152,7 @@ class HostedSparkConfig(BaseSettings):
         default=False,
     )
 
-
+# cdg: ZhipuAI官方大模型远程服务配置信息
 class HostedZhipuAIConfig(BaseSettings):
     """
     Configuration for hosted ZhipuAI service
@@ -158,7 +163,7 @@ class HostedZhipuAIConfig(BaseSettings):
         default=False,
     )
 
-
+# cdg: 远程内容审核配置信息
 class HostedModerationConfig(BaseSettings):
     """
     Configuration for hosted Moderation service
@@ -174,7 +179,7 @@ class HostedModerationConfig(BaseSettings):
         default="",
     )
 
-
+# cdg: 远程应用模板配置信息
 class HostedFetchAppTemplateConfig(BaseSettings):
     """
     Configuration for fetching app templates
@@ -190,7 +195,7 @@ class HostedFetchAppTemplateConfig(BaseSettings):
         default="https://tmpl.dify.ai",
     )
 
-
+# cdg: 大模型远程服务配置信息，通过类继承的方式实现对上述配置信息的组合
 class HostedServiceConfig(
     # place the configs in alphabet order
     HostedAnthropicConfig,

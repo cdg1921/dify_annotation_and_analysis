@@ -11,14 +11,14 @@ from pydantic import BaseModel
 
 from configs import dify_config
 
-
+# cdg: 文件信息，用于存储文件信息，包括文件名、扩展名、MIME类型、大小等
 class FileInfo(BaseModel):
     filename: str
     extension: str
     mimetype: str
     size: int
 
-
+# cdg: 从响应中猜测文件信息，用于从响应中猜测文件信息，包括文件名、扩展名、MIME类型、大小等
 def guess_file_info_from_response(response: httpx.Response):
     url = str(response.url)
     # Try to extract filename from URL
@@ -61,7 +61,7 @@ def guess_file_info_from_response(response: httpx.Response):
         size=int(response.headers.get("Content-Length", -1)),
     )
 
-
+# cdg: 从功能字典中获取功能特性配置，包括打开语句、建议问题、建议问题后回答、语音转文本、文本转语音、检索资源、注释回复、更多类似、用户输入表单、敏感词避免、文件上传等
 def get_parameters_from_feature_dict(*, features_dict: Mapping[str, Any], user_input_form: list[dict[str, Any]]):
     return {
         "opening_statement": features_dict.get("opening_statement"),

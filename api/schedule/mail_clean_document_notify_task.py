@@ -13,7 +13,7 @@ from models.account import Account, Tenant, TenantAccountJoin
 from models.dataset import Dataset, DatasetAutoDisableLog
 from services.feature_service import FeatureService
 
-
+# cdg: 定义send_document_clean_notify_task任务，用于发送文档清理通知邮件。
 @app.celery.task(queue="dataset")
 def send_document_clean_notify_task():
     """

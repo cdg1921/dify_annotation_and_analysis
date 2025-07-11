@@ -8,6 +8,7 @@ parameters__system_parameters = {
     "workflow_file_upload_limit": fields.Integer,
 }
 
+# cdg: 参数字段，用于规范化接口返回字段格式，一般和marshal_with装饰器配合使用
 parameters_fields = {
     "opening_statement": fields.String,
     "suggested_questions": fields.Raw,

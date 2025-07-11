@@ -1,3 +1,4 @@
+# cdg: 工具管理模块相关表结构定义
 import json
 from typing import Any, Optional
 
@@ -14,6 +15,7 @@ from .model import Account, App, Tenant
 from .types import StringUUID
 
 
+# cdg: 定义BuiltinToolProvider模型，表示内置工具供应商信息，包括供应商ID、租户ID、用户ID、供应商名称、加密配置、创建时间、更新时间。
 class BuiltinToolProvider(db.Model):  # type: ignore[name-defined]
     """
     This table stores the tool provider information for built-in tools for each tenant.
@@ -43,7 +45,7 @@ class BuiltinToolProvider(db.Model):  # type: ignore[name-defined]
     def credentials(self) -> dict:
         return dict(json.loads(self.encrypted_credentials))
 
-
+# cdg: 定义PublishedAppTool模型，表示已发布应用工具信息，包括工具ID、应用ID、用户ID、工具描述、LLM描述、查询描述、查询名称、工具名称、作者、创建时间、更新时间。
 class PublishedAppTool(db.Model):  # type: ignore[name-defined]
     """
     The table stores the apps published as a tool for each person.
@@ -85,7 +87,7 @@ class PublishedAppTool(db.Model):  # type: ignore[name-defined]
     def app(self):
         return db.session.query(App).filter(App.id == self.app_id).first()
 
-
+# cdg: 定义ApiToolProvider模型，表示API工具供应商信息，包括供应商ID、供应商名称、图标、原始模式、模式类型、用户ID、租户ID、描述、工具、凭据、隐私政策、自定义免责声明、创建时间、更新时间。# 
 class ApiToolProvider(db.Model):  # type: ignore[name-defined]
     """
     The table stores the api providers.
@@ -143,7 +145,7 @@ class ApiToolProvider(db.Model):  # type: ignore[name-defined]
     def tenant(self) -> Tenant | None:
         return db.session.query(Tenant).filter(Tenant.id == self.tenant_id).first()
 
-
+# cdg: 定义ToolLabelBinding模型，表示工具标签绑定信息，包括绑定ID、工具ID、工具类型、标签名称。
 class ToolLabelBinding(db.Model):  # type: ignore[name-defined]
     """
     The table stores the labels for tools.
@@ -163,7 +165,7 @@ class ToolLabelBinding(db.Model):  # type: ignore[name-defined]
     # label name
     label_name = db.Column(db.String(40), nullable=False)
 
-
+# cdg: 定义WorkflowToolProvider模型，表示工作流工具供应商信息，包括供应商ID、供应商名称、标签、图标、应用ID、版本、用户ID、租户ID、描述、参数配置、隐私政策、创建时间、更新时间。
 class WorkflowToolProvider(db.Model):  # type: ignore[name-defined]
     """
     The table stores the workflow providers.
@@ -217,7 +219,7 @@ class WorkflowToolProvider(db.Model):  # type: ignore[name-defined]
     def app(self) -> App | None:
         return db.session.query(App).filter(App.id == self.app_id).first()
 
-
+# cdg: 定义ToolModelInvoke模型，表示工具模型调用信息，包括调用ID、用户ID、租户ID、提供者、工具类型、工具名称、调用参数、提示消息、调用响应、提示令牌数、答案令牌数、答案单价、答案单价单位、提供者响应延迟、总价、货币、创建时间、更新时间。
 class ToolModelInvoke(db.Model):  # type: ignore[name-defined]
     """
     store the invoke logs from tool invoke
@@ -254,7 +256,7 @@ class ToolModelInvoke(db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-
+# cdg: 定义ToolConversationVariables模型，表示工具会话变量信息，包括变量ID、用户ID、租户ID、会话ID、变量池。
 class ToolConversationVariables(db.Model):  # type: ignore[name-defined]
     """
     store the conversation variables from tool invoke
@@ -285,7 +287,7 @@ class ToolConversationVariables(db.Model):  # type: ignore[name-defined]
     def variables(self) -> Any:
         return json.loads(self.variables_str)
 
-
+# cdg: 定义ToolFile模型，表示工具文件信息，包括文件ID、用户ID、租户ID、会话ID、文件键、文件MIME类型、原始URL、文件名、文件大小。
 class ToolFile(db.Model):  # type: ignore[name-defined]
     __tablename__ = "tool_files"
     __table_args__ = (

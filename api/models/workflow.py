@@ -1,3 +1,4 @@
+# cdg: 工作流管理模块相关表结构定义
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -23,7 +24,7 @@ from .types import StringUUID
 if TYPE_CHECKING:
     from models.model import AppMode, Message
 
-
+# cdg: 定义WorkflowType枚举，表示工作流类型，包括workflow和chat。
 class WorkflowType(Enum):
     """
     Workflow Type Enum
@@ -58,7 +59,7 @@ class WorkflowType(Enum):
         app_mode = app_mode if isinstance(app_mode, AppMode) else AppMode.value_of(app_mode)
         return cls.WORKFLOW if app_mode == AppMode.WORKFLOW else cls.CHAT
 
-
+# cdg: 定义Workflow模型，表示工作流信息，包括工作流ID、租户ID、应用ID、工作流类型、版本、图、特征、创建者、创建时间、更新者、更新时间、环境变量、会话变量。
 class Workflow(db.Model):  # type: ignore[name-defined]
     """
     Workflow, for `Workflow App` and `Chat App workflow mode`.
@@ -257,6 +258,7 @@ class Workflow(db.Model):  # type: ignore[name-defined]
         results = list(map(decrypt_func, results))
         return results
 
+    # cdg: 定义environment_variables.setter方法，用于设置环境变量。
     @environment_variables.setter
     def environment_variables(self, value: Sequence[Variable]):
         if not value:
@@ -304,6 +306,7 @@ class Workflow(db.Model):  # type: ignore[name-defined]
         }
         return result
 
+    # cdg: 定义conversation_variables属性，用于获取会话变量。
     @property
     def conversation_variables(self) -> Sequence[Variable]:
         # TODO: find some way to init `self._conversation_variables` when instance created.
@@ -314,6 +317,7 @@ class Workflow(db.Model):  # type: ignore[name-defined]
         results = [variable_factory.build_conversation_variable_from_mapping(v) for v in variables_dict.values()]
         return results
 
+    # cdg: 定义conversation_variables.setter方法，用于设置会话变量。
     @conversation_variables.setter
     def conversation_variables(self, value: Sequence[Variable]) -> None:
         self._conversation_variables = json.dumps(
@@ -322,6 +326,7 @@ class Workflow(db.Model):  # type: ignore[name-defined]
         )
 
 
+# cdg: 定义WorkflowRunStatus枚举，表示工作流运行状态，包括running、succeeded、failed、stopped、partial-succeeded。
 class WorkflowRunStatus(StrEnum):
     """
     Workflow Run Status Enum
@@ -346,7 +351,7 @@ class WorkflowRunStatus(StrEnum):
                 return mode
         raise ValueError(f"invalid workflow run status value {value}")
 
-
+# cdg: 定义WorkflowRun模型，表示工作流运行信息，包括运行ID、租户ID、应用ID、序列号、工作流ID、类型、触发来源、版本、图、输入、状态、输出、错误、执行时间、总令牌数、总步骤数、创建者角色、创建者、创建时间、完成时间。
 class WorkflowRun(db.Model):  # type: ignore[name-defined]
     """
     Workflow Run
@@ -501,7 +506,7 @@ class WorkflowRun(db.Model):  # type: ignore[name-defined]
             exceptions_count=data.get("exceptions_count"),
         )
 
-
+# cdg: 定义WorkflowNodeExecutionTriggeredFrom枚举，表示工作流节点执行触发来源，包括single-step和workflow-run。
 class WorkflowNodeExecutionTriggeredFrom(Enum):
     """
     Workflow Node Execution Triggered From Enum
@@ -523,7 +528,7 @@ class WorkflowNodeExecutionTriggeredFrom(Enum):
                 return mode
         raise ValueError(f"invalid workflow node execution triggered from value {value}")
 
-
+# cdg: 定义WorkflowNodeExecutionStatus枚举，表示工作流节点执行状态，包括running、succeeded、failed、exception、retry。
 class WorkflowNodeExecutionStatus(Enum):
     """
     Workflow Node Execution Status Enum
@@ -548,7 +553,7 @@ class WorkflowNodeExecutionStatus(Enum):
                 return mode
         raise ValueError(f"invalid workflow node execution status value {value}")
 
-
+# cdg: 定义WorkflowNodeExecution模型，表示工作流节点执行信息，包括执行ID、租户ID、应用ID、工作流ID、触发来源、工作流运行ID、索引、前驱节点ID、节点执行ID、节点ID、节点类型、标题、输入、处理数据、输出、状态、错误、执行时间、执行元数据、创建者角色、创建者、完成时间。
 class WorkflowNodeExecution(db.Model):  # type: ignore[name-defined]
     """
     Workflow Node Execution
@@ -691,7 +696,7 @@ class WorkflowNodeExecution(db.Model):  # type: ignore[name-defined]
 
         return extras
 
-
+# cdg: 定义WorkflowAppLogCreatedFrom枚举，表示工作流应用日志创建来源，包括service-api、web-app、installed-app。
 class WorkflowAppLogCreatedFrom(Enum):
     """
     Workflow App Log Created From Enum
@@ -714,7 +719,7 @@ class WorkflowAppLogCreatedFrom(Enum):
                 return mode
         raise ValueError(f"invalid workflow app log created from value {value}")
 
-
+# cdg: 定义WorkflowAppLog模型，表示工作流应用日志信息，包括日志ID、租户ID、应用ID、工作流ID、工作流运行ID、创建来源、创建者角色、创建者、创建时间。
 class WorkflowAppLog(db.Model):  # type: ignore[name-defined]
     """
     Workflow App execution log, excluding workflow debugging records.
@@ -776,7 +781,7 @@ class WorkflowAppLog(db.Model):  # type: ignore[name-defined]
         created_by_role = CreatedByRole(self.created_by_role)
         return db.session.get(EndUser, self.created_by) if created_by_role == CreatedByRole.END_USER else None
 
-
+# cdg: 定义ConversationVariable模型，表示会话变量信息，包括变量ID、会话ID、应用ID、数据、创建时间、更新时间。  
 class ConversationVariable(db.Model):  # type: ignore[name-defined]
     __tablename__ = "workflow_conversation_variables"
 

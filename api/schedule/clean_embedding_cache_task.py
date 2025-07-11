@@ -10,7 +10,7 @@ from configs import dify_config
 from extensions.ext_database import db
 from models.dataset import Embedding
 
-
+# cdg: 定义clean_embedding_cache_task任务，用于清理嵌入缓存。
 @app.celery.task(queue="dataset")
 def clean_embedding_cache_task():
     click.echo(click.style("Start clean embedding cache.", fg="green"))

@@ -8,7 +8,7 @@ from core.rag.datasource.vdb.tidb_on_qdrant.tidb_service import TidbService
 from extensions.ext_database import db
 from models.dataset import TidbAuthBinding
 
-
+# cdg: 定义create_tidb_serverless_task任务，用于创建TiDB Serverless集群。
 @app.celery.task(queue="dataset")
 def create_tidb_serverless_task():
     click.echo(click.style("Start create tidb serverless task.", fg="green"))
