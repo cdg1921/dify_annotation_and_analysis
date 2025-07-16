@@ -4,7 +4,7 @@ import requests
 
 from services.auth.api_key_auth_base import ApiKeyAuthBase
 
-
+# cdg: 定义JinaAuth类，继承自ApiKeyAuthBase类，用于实现基于JinaAuth的API密钥认证，代码与jina.py一致，只是为了兼容firecrawl的代码结构。
 class JinaAuth(ApiKeyAuthBase):
     def __init__(self, credentials: dict):
         super().__init__(credentials)
