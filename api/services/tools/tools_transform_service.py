@@ -22,8 +22,9 @@ from models.tools import ApiToolProvider, BuiltinToolProvider, WorkflowToolProvi
 
 logger = logging.getLogger(__name__)
 
-
+# cdg: 工具转换服务
 class ToolTransformService:
+    # cdg: 获取工具提供者图标URL
     @staticmethod
     def get_tool_provider_icon_url(provider_type: str, provider_name: str, icon: str) -> Union[str, dict]:
         """
@@ -41,6 +42,7 @@ class ToolTransformService:
 
         return ""
 
+    # cdg: 重新打包提供者
     @staticmethod
     def repack_provider(provider: Union[dict, UserToolProvider]):
         """
@@ -60,6 +62,7 @@ class ToolTransformService:
                 ),
             )
 
+    # cdg: 内置提供者转换为用户提供者
     @staticmethod
     def builtin_provider_to_user_provider(
         provider_controller: BuiltinToolProviderController,
@@ -125,6 +128,7 @@ class ToolTransformService:
 
         return result
 
+    # cdg: API提供者转换为控制器
     @staticmethod
     def api_provider_to_controller(
         db_provider: ApiToolProvider,
@@ -142,6 +146,7 @@ class ToolTransformService:
 
         return controller
 
+    # cdg: 工作流提供者转换为控制器
     @staticmethod
     def workflow_provider_to_controller(db_provider: WorkflowToolProvider) -> WorkflowToolProviderController:
         """
@@ -149,6 +154,7 @@ class ToolTransformService:
         """
         return WorkflowToolProviderController.from_db(db_provider)
 
+    # cdg: 工作流提供者转换为用户提供者
     @staticmethod
     def workflow_provider_to_user_provider(
         provider_controller: WorkflowToolProviderController, labels: Optional[list[str]] = None
@@ -179,6 +185,7 @@ class ToolTransformService:
             labels=labels or [],
         )
 
+    # cdg: API提供者转换为用户提供者
     @staticmethod
     def api_provider_to_user_provider(
         provider_controller: ApiToolProviderController,
@@ -232,6 +239,7 @@ class ToolTransformService:
 
         return result
 
+    # cdg: 工具转换为用户工具
     @staticmethod
     def tool_to_user_tool(
         tool: Union[ApiToolBundle, WorkflowTool, Tool],
