@@ -4,8 +4,9 @@ from services.recommend_app.recommend_app_base import RecommendAppRetrievalBase
 from services.recommend_app.recommend_app_type import RecommendAppType
 from services.recommend_app.remote.remote_retrieval import RemoteRecommendAppRetrieval
 
-
+# cdg: 根据推荐应用类型获取推荐应用检索对象。
 class RecommendAppRetrievalFactory:
+    # cdg: 根据推荐应用类型获取推荐应用检索对象。
     @staticmethod
     def get_recommend_app_factory(mode: str) -> type[RecommendAppRetrievalBase]:
         match mode:
@@ -18,6 +19,7 @@ class RecommendAppRetrievalFactory:
             case _:
                 raise ValueError(f"invalid fetch recommended apps mode: {mode}")
 
+    # cdg: 获取内置推荐应用检索对象。
     @staticmethod
     def get_buildin_recommend_app_retrieval():
         return BuildInRecommendAppRetrieval

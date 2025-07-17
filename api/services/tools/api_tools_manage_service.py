@@ -26,8 +26,9 @@ from services.tools.tools_transform_service import ToolTransformService
 
 logger = logging.getLogger(__name__)
 
-
+# cdg: API工具管理服务
 class ApiToolManageService:
+    # cdg: 解析API模式
     @staticmethod
     def parser_api_schema(schema: str) -> Mapping[str, Any]:
         """
@@ -41,6 +42,7 @@ class ApiToolManageService:
                 raise ValueError(f"invalid schema: {str(e)}")
 
             credentials_schema = [
+                # cdg: 认证方式
                 ToolProviderCredentials(
                     name="auth_type",
                     type=ToolProviderCredentials.CredentialsType.SELECT,
@@ -52,6 +54,7 @@ class ApiToolManageService:
                     ],
                     placeholder=I18nObject(en_US="Select auth type", zh_Hans="选择认证方式"),
                 ),
+                # cdg: API密钥头部
                 ToolProviderCredentials(
                     name="api_key_header",
                     type=ToolProviderCredentials.CredentialsType.TEXT_INPUT,
@@ -60,6 +63,7 @@ class ApiToolManageService:
                     default="api_key",
                     help=I18nObject(en_US="HTTP header name for api key", zh_Hans="HTTP 头部字段名，用于传递 api key"),
                 ),
+                # cdg: API密钥值
                 ToolProviderCredentials(
                     name="api_key_value",
                     type=ToolProviderCredentials.CredentialsType.TEXT_INPUT,
@@ -83,6 +87,7 @@ class ApiToolManageService:
         except Exception as e:
             raise ValueError(f"invalid schema: {str(e)}")
 
+    # cdg: 将API模式转换为工具包
     @staticmethod
     def convert_schema_to_tool_bundles(
         schema: str, extra_info: Optional[dict] = None
@@ -98,6 +103,7 @@ class ApiToolManageService:
         except Exception as e:
             raise ValueError(f"invalid schema: {str(e)}")
 
+    # cdg: 创建API工具提供者
     @staticmethod
     def create_api_tool_provider(
         user_id: str,
@@ -179,6 +185,7 @@ class ApiToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 获取API工具提供者远程模式
     @staticmethod
     def get_api_tool_provider_remote_schema(user_id: str, tenant_id: str, url: str):
         """
@@ -204,6 +211,7 @@ class ApiToolManageService:
 
         return {"schema": schema}
 
+    # cdg: API工具提供者工具列表
     @staticmethod
     def list_api_tool_provider_tools(user_id: str, tenant_id: str, provider_name: str) -> list[UserTool]:
         """
@@ -232,6 +240,7 @@ class ApiToolManageService:
             for tool_bundle in provider.tools
         ]
 
+    # cdg: 更新API工具提供者
     @staticmethod
     def update_api_tool_provider(
         user_id: str,
@@ -315,7 +324,8 @@ class ApiToolManageService:
         ToolLabelManager.update_tool_labels(provider_controller, labels)
 
         return {"result": "success"}
-
+    
+    # cdg: 删除API工具提供者
     @staticmethod
     def delete_api_tool_provider(user_id: str, tenant_id: str, provider_name: str):
         """
@@ -338,6 +348,7 @@ class ApiToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 获取API工具提供者
     @staticmethod
     def get_api_tool_provider(user_id: str, tenant_id: str, provider: str):
         """
@@ -345,6 +356,7 @@ class ApiToolManageService:
         """
         return ToolManager.user_get_api_provider(provider=provider, tenant_id=tenant_id)
 
+    # cdg: 测试API工具预览
     @staticmethod
     def test_api_tool_preview(
         tenant_id: str,
@@ -431,6 +443,7 @@ class ApiToolManageService:
 
         return {"result": result or "empty response"}
 
+    # cdg: 列出API工具
     @staticmethod
     def list_api_tools(user_id: str, tenant_id: str) -> list[UserToolProvider]:
         """
