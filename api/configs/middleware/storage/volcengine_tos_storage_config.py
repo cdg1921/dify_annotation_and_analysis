@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
-
+# cdg: 火山引擎TOS存储配置信息
 class VolcengineTOSStorageConfig(BaseSettings):
     """
     Configuration settings for Volcengine Tinder Object Storage (TOS)
