@@ -18,9 +18,10 @@ const queryDateFormat = 'YYYY-MM-DD HH:mm'
 
 export type IChartViewProps = {
   appId: string
+  headerRight: React.ReactNode
 }
 
-export default function ChartView({ appId }: IChartViewProps) {
+export default function ChartView({ appId, headerRight }: IChartViewProps) {
   const { t } = useTranslation()
   const appDetail = useAppStore(state => state.appDetail)
   const isChatApp = appDetail?.mode !== 'completion' && appDetail?.mode !== 'workflow'
@@ -46,28 +47,33 @@ export default function ChartView({ appId }: IChartViewProps) {
 
   return (
     <div>
-      <div className='flex flex-row items-center mt-8 mb-4 text-gray-900 text-base'>
-        <span className='mr-3'>{t('appOverview.analysis.title')}</span>
-        <SimpleSelect
-          items={Object.entries(TIME_PERIOD_MAPPING).map(([k, v]) => ({ value: k, name: t(`appLog.filter.period.${v.name}`) }))}
-          className='mt-0 !w-40'
-          onSelect={(item) => {
-            const id = item.value
-            const value = TIME_PERIOD_MAPPING[id]?.value || '-1'
-            const name = item.name || t('appLog.filter.period.allTime')
-            onSelect({ value, name })
-          }}
-          defaultValue={'2'}
-        />
+      <div className='mb-4'>
+        <div className='system-xl-semibold mb-2 text-text-primary'>{t('common.appMenus.overview')}</div>
+        <div className='flex items-center justify-between'>
+          <div className='flex flex-row items-center'>
+            <SimpleSelect
+              items={Object.entries(TIME_PERIOD_MAPPING).map(([k, v]) => ({ value: k, name: t(`appLog.filter.period.${v.name}`) }))}
+              className='mt-0 !w-40'
+              onSelect={(item) => {
+                const id = item.value
+                const value = TIME_PERIOD_MAPPING[id]?.value ?? '-1'
+                const name = item.name || t('appLog.filter.period.allTime')
+                onSelect({ value, name })
+              }}
+              defaultValue={'2'}
+            />
+          </div>
+          {headerRight}
+        </div>
       </div>
       {!isWorkflow && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           <ConversationsChart period={period} id={appId} />
           <EndUsersChart period={period} id={appId} />
         </div>
       )}
       {!isWorkflow && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           {isChatApp
             ? (
               <AvgSessionInteractions period={period} id={appId} />
@@ -79,24 +85,24 @@ export default function ChartView({ appId }: IChartViewProps) {
         </div>
       )}
       {!isWorkflow && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           <UserSatisfactionRate period={period} id={appId} />
           <CostChart period={period} id={appId} />
         </div>
       )}
       {!isWorkflow && isChatApp && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           <MessagesChart period={period} id={appId} />
         </div>
       )}
       {isWorkflow && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           <WorkflowMessagesChart period={period} id={appId} />
           <WorkflowDailyTerminalsChart period={period} id={appId} />
         </div>
       )}
       {isWorkflow && (
-        <div className='grid gap-6 grid-cols-1 xl:grid-cols-2 w-full mb-6'>
+        <div className='mb-6 grid w-full grid-cols-1 gap-6 xl:grid-cols-2'>
           <WorkflowCostChart period={period} id={appId} />
           <AvgUserInteractions period={period} id={appId} />
         </div>

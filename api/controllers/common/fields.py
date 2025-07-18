@@ -1,4 +1,6 @@
-from flask_restful import fields  # type: ignore
+from flask_restful import fields
+
+from libs.helper import AppIconUrlField
 
 parameters__system_parameters = {
     "image_file_size_limit": fields.Integer,
@@ -8,7 +10,6 @@ parameters__system_parameters = {
     "workflow_file_upload_limit": fields.Integer,
 }
 
-# cdg: 参数字段，用于规范化接口返回字段格式，一般和marshal_with装饰器配合使用
 parameters_fields = {
     "opening_statement": fields.String,
     "suggested_questions": fields.Raw,
@@ -22,4 +23,21 @@ parameters_fields = {
     "sensitive_word_avoidance": fields.Raw,
     "file_upload": fields.Raw,
     "system_parameters": fields.Nested(parameters__system_parameters),
+}
+
+site_fields = {
+    "title": fields.String,
+    "chat_color_theme": fields.String,
+    "chat_color_theme_inverted": fields.Boolean,
+    "icon_type": fields.String,
+    "icon": fields.String,
+    "icon_background": fields.String,
+    "icon_url": AppIconUrlField,
+    "description": fields.String,
+    "copyright": fields.String,
+    "privacy_policy": fields.String,
+    "custom_disclaimer": fields.String,
+    "default_language": fields.String,
+    "show_workflow_steps": fields.Boolean,
+    "use_icon_as_answer_icon": fields.Boolean,
 }

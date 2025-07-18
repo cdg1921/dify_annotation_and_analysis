@@ -1,4 +1,4 @@
-from flask_restful import fields  # type: ignore
+from flask_restful import fields
 
 from core.helper import encrypter
 from core.variables import SecretVariable, SegmentType, Variable
@@ -17,6 +17,7 @@ class EnvironmentVariableField(fields.Raw):
                 "name": value.name,
                 "value": encrypter.obfuscated_token(value.value),
                 "value_type": value.value_type.value,
+                "description": value.description,
             }
         if isinstance(value, Variable):
             return {
@@ -24,6 +25,7 @@ class EnvironmentVariableField(fields.Raw):
                 "name": value.name,
                 "value": value.value,
                 "value_type": value.value_type.value,
+                "description": value.description,
             }
         if isinstance(value, dict):
             value_type = value.get("value_type")
@@ -45,7 +47,9 @@ workflow_fields = {
     "graph": fields.Raw(attribute="graph_dict"),
     "features": fields.Raw(attribute="features_dict"),
     "hash": fields.String(attribute="unique_hash"),
-    "version": fields.String(attribute="version"),
+    "version": fields.String,
+    "marked_name": fields.String,
+    "marked_comment": fields.String,
     "created_by": fields.Nested(simple_account_fields, attribute="created_by_account"),
     "created_at": TimestampField,
     "updated_by": fields.Nested(simple_account_fields, attribute="updated_by_account", allow_null=True),

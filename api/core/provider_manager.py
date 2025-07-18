@@ -1,9 +1,11 @@
 import json
 from collections import defaultdict
 from json import JSONDecodeError
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from configs import dify_config
 from core.entities.model_entities import DefaultModelEntity, DefaultModelProviderEntity
@@ -14,6 +16,7 @@ from core.entities.provider_entities import (
     CustomProviderConfiguration,
     ModelLoadBalancingConfiguration,
     ModelSettings,
+    ProviderQuotaType,
     QuotaConfiguration,
     QuotaUnit,
     SystemConfiguration,
@@ -22,8 +25,14 @@ from core.helper import encrypter
 from core.helper.model_provider_cache import ProviderCredentialsCache, ProviderCredentialsCacheType
 from core.helper.position_helper import is_filtered
 from core.model_runtime.entities.model_entities import ModelType
-from core.model_runtime.entities.provider_entities import CredentialFormSchema, FormType, ProviderEntity
-from core.model_runtime.model_providers import model_provider_factory
+from core.model_runtime.entities.provider_entities import (
+    ConfigurateMethod,
+    CredentialFormSchema,
+    FormType,
+    ProviderEntity,
+)
+from core.model_runtime.model_providers.model_provider_factory import ModelProviderFactory
+from core.plugin.entities.plugin import ModelProviderID
 from extensions import ext_hosting_provider
 from extensions.ext_database import db
 from extensions.ext_redis import redis_client
@@ -32,7 +41,6 @@ from models.provider import (
     Provider,
     ProviderModel,
     ProviderModelSetting,
-    ProviderQuotaType,
     ProviderType,
     TenantDefaultModel,
     TenantPreferredModelProvider,
@@ -94,14 +102,39 @@ class ProviderManager:
             tenant_id, provider_name_to_provider_records_dict
         )
 
+        # append providers with langgenius/openai/openai
+        provider_name_list = list(provider_name_to_provider_records_dict.keys())
+        for provider_name in provider_name_list:
+            provider_id = ModelProviderID(provider_name)
+            if str(provider_id) not in provider_name_list:
+                provider_name_to_provider_records_dict[str(provider_id)] = provider_name_to_provider_records_dict[
+                    provider_name
+                ]
+
         # Get all provider model records of the workspace
         provider_name_to_provider_model_records_dict = self._get_all_provider_models(tenant_id)
+        for provider_name in list(provider_name_to_provider_model_records_dict.keys()):
+            provider_id = ModelProviderID(provider_name)
+            if str(provider_id) not in provider_name_to_provider_model_records_dict:
+                provider_name_to_provider_model_records_dict[str(provider_id)] = (
+                    provider_name_to_provider_model_records_dict[provider_name]
+                )
 
         # Get all provider entities
+        model_provider_factory = ModelProviderFactory(tenant_id)
         provider_entities = model_provider_factory.get_providers()
 
         # Get All preferred provider types of the workspace
         provider_name_to_preferred_model_provider_records_dict = self._get_all_preferred_model_providers(tenant_id)
+        # Ensure that both the original provider name and its ModelProviderID string representation
+        # are present in the dictionary to handle cases where either form might be used
+        for provider_name in list(provider_name_to_preferred_model_provider_records_dict.keys()):
+            provider_id = ModelProviderID(provider_name)
+            if str(provider_id) not in provider_name_to_preferred_model_provider_records_dict:
+                # Add the ModelProviderID string representation if it's not already present
+                provider_name_to_preferred_model_provider_records_dict[str(provider_id)] = (
+                    provider_name_to_preferred_model_provider_records_dict[provider_name]
+                )
 
         # Get All provider model settings
         provider_name_to_provider_model_settings_dict = self._get_all_provider_model_settings(tenant_id)
@@ -127,6 +160,11 @@ class ProviderManager:
             provider_name = provider_entity.provider
             provider_records = provider_name_to_provider_records_dict.get(provider_entity.provider, [])
             provider_model_records = provider_name_to_provider_model_records_dict.get(provider_entity.provider, [])
+            provider_id_entity = ModelProviderID(provider_name)
+            if provider_id_entity.is_langgenius():
+                provider_model_records.extend(
+                    provider_name_to_provider_model_records_dict.get(provider_id_entity.provider_name, [])
+                )
 
             # Convert to custom configuration
             custom_configuration = self._to_custom_configuration(
@@ -168,6 +206,20 @@ class ProviderManager:
                 provider_name
             )
 
+            provider_id_entity = ModelProviderID(provider_name)
+
+            if provider_id_entity.is_langgenius():
+                if provider_model_settings is not None:
+                    provider_model_settings.extend(
+                        provider_name_to_provider_model_settings_dict.get(provider_id_entity.provider_name, [])
+                    )
+                if provider_load_balancing_configs is not None:
+                    provider_load_balancing_configs.extend(
+                        provider_name_to_provider_load_balancing_model_configs_dict.get(
+                            provider_id_entity.provider_name, []
+                        )
+                    )
+
             # Convert to model settings
             model_settings = self._to_model_settings(
                 provider_entity=provider_entity,
@@ -185,7 +237,7 @@ class ProviderManager:
                 model_settings=model_settings,
             )
 
-            provider_configurations[provider_name] = provider_configuration
+            provider_configurations[str(provider_id_entity)] = provider_configuration
 
         # Return the encapsulated object
         return provider_configurations
@@ -205,12 +257,10 @@ class ProviderManager:
         if not provider_configuration:
             raise ValueError(f"Provider {provider} does not exist.")
 
-        provider_instance = provider_configuration.get_provider_instance()
-        model_type_instance = provider_instance.get_model_instance(model_type)
+        model_type_instance = provider_configuration.get_model_type_instance(model_type)
 
         return ProviderModelBundle(
             configuration=provider_configuration,
-            provider_instance=provider_instance,
             model_type_instance=model_type_instance,
         )
 
@@ -246,20 +296,19 @@ class ProviderManager:
                     (model for model in available_models if model.model == "gpt-4"), available_models[0]
                 )
 
-                default_model = TenantDefaultModel(
-                    tenant_id=tenant_id,
-                    model_type=model_type.to_origin_model_type(),
-                    provider_name=available_model.provider.provider,
-                    model_name=available_model.model,
-                )
+                default_model = TenantDefaultModel()
+                default_model.tenant_id = tenant_id
+                default_model.model_type = model_type.to_origin_model_type()
+                default_model.provider_name = available_model.provider.provider
+                default_model.model_name = available_model.model
                 db.session.add(default_model)
                 db.session.commit()
 
         if not default_model:
             return None
 
-        provider_instance = model_provider_factory.get_provider_instance(default_model.provider_name)
-        provider_schema = provider_instance.get_provider_schema()
+        model_provider_factory = ModelProviderFactory(tenant_id)
+        provider_schema = model_provider_factory.get_provider_schema(provider=default_model.provider_name)
 
         return DefaultModelEntity(
             model=default_model.model_name,
@@ -273,7 +322,7 @@ class ProviderManager:
             ),
         )
 
-    def get_first_provider_first_model(self, tenant_id: str, model_type: ModelType) -> tuple[str, str]:
+    def get_first_provider_first_model(self, tenant_id: str, model_type: ModelType) -> tuple[str | None, str | None]:
         """
         Get names of first model and its provider
 
@@ -285,6 +334,9 @@ class ProviderManager:
 
         # get available models from provider_configurations
         all_models = provider_configurations.get_models(model_type=model_type, only_active=False)
+
+        if not all_models:
+            return None, None
 
         return all_models[0].provider.provider, all_models[0].model
 
@@ -343,18 +395,13 @@ class ProviderManager:
 
     @staticmethod
     def _get_all_providers(tenant_id: str) -> dict[str, list[Provider]]:
-        """
-        Get all provider records of the workspace.
-
-        :param tenant_id: workspace id
-        :return:
-        """
-        providers = db.session.query(Provider).filter(Provider.tenant_id == tenant_id, Provider.is_valid == True).all()
-
         provider_name_to_provider_records_dict = defaultdict(list)
-        for provider in providers:
-            provider_name_to_provider_records_dict[provider.provider_name].append(provider)
-
+        with Session(db.engine, expire_on_commit=False) as session:
+            stmt = select(Provider).where(Provider.tenant_id == tenant_id, Provider.is_valid == True)
+            providers = session.scalars(stmt)
+            for provider in providers:
+                # Use provider name with prefix after the data migration
+                provider_name_to_provider_records_dict[str(ModelProviderID(provider.provider_name))].append(provider)
         return provider_name_to_provider_records_dict
 
     @staticmethod
@@ -365,17 +412,12 @@ class ProviderManager:
         :param tenant_id: workspace id
         :return:
         """
-        # Get all provider model records of the workspace
-        provider_models = (
-            db.session.query(ProviderModel)
-            .filter(ProviderModel.tenant_id == tenant_id, ProviderModel.is_valid == True)
-            .all()
-        )
-
         provider_name_to_provider_model_records_dict = defaultdict(list)
-        for provider_model in provider_models:
-            provider_name_to_provider_model_records_dict[provider_model.provider_name].append(provider_model)
-
+        with Session(db.engine, expire_on_commit=False) as session:
+            stmt = select(ProviderModel).where(ProviderModel.tenant_id == tenant_id, ProviderModel.is_valid == True)
+            provider_models = session.scalars(stmt)
+            for provider_model in provider_models:
+                provider_name_to_provider_model_records_dict[provider_model.provider_name].append(provider_model)
         return provider_name_to_provider_model_records_dict
 
     @staticmethod
@@ -386,17 +428,14 @@ class ProviderManager:
         :param tenant_id: workspace id
         :return:
         """
-        preferred_provider_types = (
-            db.session.query(TenantPreferredModelProvider)
-            .filter(TenantPreferredModelProvider.tenant_id == tenant_id)
-            .all()
-        )
-
-        provider_name_to_preferred_provider_type_records_dict = {
-            preferred_provider_type.provider_name: preferred_provider_type
-            for preferred_provider_type in preferred_provider_types
-        }
-
+        provider_name_to_preferred_provider_type_records_dict = {}
+        with Session(db.engine, expire_on_commit=False) as session:
+            stmt = select(TenantPreferredModelProvider).where(TenantPreferredModelProvider.tenant_id == tenant_id)
+            preferred_provider_types = session.scalars(stmt)
+            provider_name_to_preferred_provider_type_records_dict = {
+                preferred_provider_type.provider_name: preferred_provider_type
+                for preferred_provider_type in preferred_provider_types
+            }
         return provider_name_to_preferred_provider_type_records_dict
 
     @staticmethod
@@ -407,18 +446,14 @@ class ProviderManager:
         :param tenant_id: workspace id
         :return:
         """
-        provider_model_settings = (
-            db.session.query(ProviderModelSetting).filter(ProviderModelSetting.tenant_id == tenant_id).all()
-        )
-
         provider_name_to_provider_model_settings_dict = defaultdict(list)
-        for provider_model_setting in provider_model_settings:
-            (
+        with Session(db.engine, expire_on_commit=False) as session:
+            stmt = select(ProviderModelSetting).where(ProviderModelSetting.tenant_id == tenant_id)
+            provider_model_settings = session.scalars(stmt)
+            for provider_model_setting in provider_model_settings:
                 provider_name_to_provider_model_settings_dict[provider_model_setting.provider_name].append(
                     provider_model_setting
                 )
-            )
-
         return provider_name_to_provider_model_settings_dict
 
     @staticmethod
@@ -441,24 +476,21 @@ class ProviderManager:
         if not model_load_balancing_enabled:
             return {}
 
-        provider_load_balancing_configs = (
-            db.session.query(LoadBalancingModelConfig).filter(LoadBalancingModelConfig.tenant_id == tenant_id).all()
-        )
-
         provider_name_to_provider_load_balancing_model_configs_dict = defaultdict(list)
-        for provider_load_balancing_config in provider_load_balancing_configs:
-            (
+        with Session(db.engine, expire_on_commit=False) as session:
+            stmt = select(LoadBalancingModelConfig).where(LoadBalancingModelConfig.tenant_id == tenant_id)
+            provider_load_balancing_configs = session.scalars(stmt)
+            for provider_load_balancing_config in provider_load_balancing_configs:
                 provider_name_to_provider_load_balancing_model_configs_dict[
                     provider_load_balancing_config.provider_name
                 ].append(provider_load_balancing_config)
-            )
 
         return provider_name_to_provider_load_balancing_model_configs_dict
 
     @staticmethod
     def _init_trial_provider_records(
-        tenant_id: str, provider_name_to_provider_records_dict: dict[str, list]
-    ) -> dict[str, list]:
+        tenant_id: str, provider_name_to_provider_records_dict: dict[str, list[Provider]]
+    ) -> dict[str, list[Provider]]:
         """
         Initialize trial provider records if not exists.
 
@@ -492,35 +524,39 @@ class ProviderManager:
                     if ProviderQuotaType.TRIAL not in provider_quota_to_provider_record_dict:
                         try:
                             # FIXME ignore the type errork, onyl TrialHostingQuota has limit need to change the logic
-                            provider_record = Provider(
+                            new_provider_record = Provider(
                                 tenant_id=tenant_id,
-                                provider_name=provider_name,
+                                # TODO: Use provider name with prefix after the data migration.
+                                provider_name=ModelProviderID(provider_name).provider_name,
                                 provider_type=ProviderType.SYSTEM.value,
                                 quota_type=ProviderQuotaType.TRIAL.value,
                                 quota_limit=quota.quota_limit,  # type: ignore
                                 quota_used=0,
                                 is_valid=True,
                             )
-                            db.session.add(provider_record)
+                            db.session.add(new_provider_record)
                             db.session.commit()
+                            provider_name_to_provider_records_dict[provider_name].append(new_provider_record)
                         except IntegrityError:
                             db.session.rollback()
-                            provider_record = (
+                            existed_provider_record = (
                                 db.session.query(Provider)
                                 .filter(
                                     Provider.tenant_id == tenant_id,
-                                    Provider.provider_name == provider_name,
+                                    Provider.provider_name == ModelProviderID(provider_name).provider_name,
                                     Provider.provider_type == ProviderType.SYSTEM.value,
                                     Provider.quota_type == ProviderQuotaType.TRIAL.value,
                                 )
                                 .first()
                             )
+                            if not existed_provider_record:
+                                continue
 
-                            if provider_record and not provider_record.is_valid:
-                                provider_record.is_valid = True
+                            if not existed_provider_record.is_valid:
+                                existed_provider_record.is_valid = True
                                 db.session.commit()
 
-                        provider_name_to_provider_records_dict[provider_name].append(provider_record)
+                            provider_name_to_provider_records_dict[provider_name].append(existed_provider_record)
 
         return provider_name_to_provider_records_dict
 
@@ -573,10 +609,9 @@ class ProviderManager:
             if not cached_provider_credentials:
                 try:
                     # fix origin data
-                    if (
-                        custom_provider_record.encrypted_config
-                        and not custom_provider_record.encrypted_config.startswith("{")
-                    ):
+                    if custom_provider_record.encrypted_config is None:
+                        raise ValueError("No credentials found")
+                    if not custom_provider_record.encrypted_config.startswith("{"):
                         provider_credentials = {"openai_api_key": custom_provider_record.encrypted_config}
                     else:
                         provider_credentials = json.loads(custom_provider_record.encrypted_config)
@@ -680,7 +715,7 @@ class ProviderManager:
             return SystemConfiguration(enabled=False)
 
         # Convert provider_records to dict
-        quota_type_to_provider_records_dict = {}
+        quota_type_to_provider_records_dict: dict[ProviderQuotaType, Provider] = {}
         for provider_record in provider_records:
             if provider_record.provider_type != ProviderType.SYSTEM.value:
                 continue
@@ -704,6 +739,11 @@ class ProviderManager:
                     continue
             else:
                 provider_record = quota_type_to_provider_records_dict[provider_quota.quota_type]
+
+                if provider_record.quota_used is None:
+                    raise ValueError("quota_used is None")
+                if provider_record.quota_limit is None:
+                    raise ValueError("quota_limit is None")
 
                 quota_configuration = QuotaConfiguration(
                     quota_type=provider_quota.quota_type,
@@ -734,13 +774,13 @@ class ProviderManager:
                 )
 
                 # Get cached provider credentials
+                # error occurs
                 cached_provider_credentials = provider_credentials_cache.get()
 
                 if not cached_provider_credentials:
-                    try:
-                        provider_credentials = json.loads(provider_record.encrypted_config)
-                    except JSONDecodeError:
-                        provider_credentials = {}
+                    provider_credentials: dict[str, Any] = {}
+                    if provider_records and provider_records[0].encrypted_config:
+                        provider_credentials = json.loads(provider_records[0].encrypted_config)
 
                     # Get provider credential secret variables
                     provider_credential_secret_variables = self._extract_secret_variables(
@@ -757,7 +797,9 @@ class ProviderManager:
                         if variable in provider_credentials:
                             try:
                                 provider_credentials[variable] = encrypter.decrypt_token_with_decoding(
-                                    provider_credentials.get(variable), self.decoding_rsa_key, self.decoding_cipher_rsa
+                                    provider_credentials.get(variable, ""),
+                                    self.decoding_rsa_key,
+                                    self.decoding_cipher_rsa,
                                 )
                             except ValueError:
                                 pass
@@ -835,11 +877,18 @@ class ProviderManager:
         :return:
         """
         # Get provider model credential secret variables
-        model_credential_secret_variables = self._extract_secret_variables(
-            provider_entity.model_credential_schema.credential_form_schemas
-            if provider_entity.model_credential_schema
-            else []
-        )
+        if ConfigurateMethod.PREDEFINED_MODEL in provider_entity.configurate_methods:
+            model_credential_secret_variables = self._extract_secret_variables(
+                provider_entity.provider_credential_schema.credential_form_schemas
+                if provider_entity.provider_credential_schema
+                else []
+            )
+        else:
+            model_credential_secret_variables = self._extract_secret_variables(
+                provider_entity.model_credential_schema.credential_form_schemas
+                if provider_entity.model_credential_schema
+                else []
+            )
 
         model_settings: list[ModelSettings] = []
         if not provider_model_settings:

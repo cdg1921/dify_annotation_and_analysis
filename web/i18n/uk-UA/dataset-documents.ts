@@ -28,6 +28,8 @@ const translation = {
       delete: 'Видалити',
       enableWarning: 'Архівований файл неможливо активувати',
       sync: 'Синхронізувати',
+      pause: 'Пауза',
+      resume: 'Продовжити',
     },
     index: {
       enable: 'Активувати',
@@ -132,7 +134,7 @@ const translation = {
         language: 'Мова',
         authorPublisher: 'Автор/видавець',
         publishDate: 'Дата публікації',
-        topicsKeywords: 'Теми/ключові слова',
+        topicKeywords: 'Теми/ключові слова',
         description: 'Опис',
       },
       paper: {
@@ -389,6 +391,8 @@ const translation = {
     regenerationSuccessMessage: 'Ви можете закрити це вікно.',
     expandChunks: 'Розгортання фрагментів',
     regenerationConfirmTitle: 'Хочете регенерувати дитячі шматки?',
+    keywordEmpty: 'Ключове слово не може бути порожнім',
+    keywordDuplicate: 'Ключове слово вже існує',
   },
 }
 

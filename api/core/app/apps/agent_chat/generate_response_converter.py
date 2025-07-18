@@ -1,9 +1,9 @@
-import json
 from collections.abc import Generator
 from typing import cast
 
 from core.app.apps.base_app_generate_response_converter import AppGenerateResponseConverter
 from core.app.entities.task_entities import (
+    AppStreamResponse,
     ChatbotAppBlockingResponse,
     ChatbotAppStreamResponse,
     ErrorStreamResponse,
@@ -11,11 +11,8 @@ from core.app.entities.task_entities import (
     PingStreamResponse,
 )
 
-# cdg:继承AppGenerateResponseConverter类，需要实现4种场景response输出方式：
-# convert_blocking_full_response、convert_blocking_simple_response、
-# convert_stream_full_response、convert_stream_simple_response
+
 class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
-    # cdg:与AdvancedChatAppGenerateResponseConverter中_blocking_response_type的类型一致
     _blocking_response_type = ChatbotAppBlockingResponse
 
     @classmethod
@@ -25,7 +22,6 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
         :param blocking_response: blocking response
         :return:
         """
-        # cdg:直接转成字典输出
         response = {
             "event": "message",
             "task_id": blocking_response.task_id,
@@ -47,20 +43,17 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
         :param blocking_response: blocking response
         :return:
         """
-        # cdg:转成字典
         response = cls.convert_blocking_full_response(blocking_response)
 
-        # cdg:对meta字典的内容进行简化
         metadata = response.get("metadata", {})
         response["metadata"] = cls._get_simple_metadata(metadata)
 
         return response
 
     @classmethod
-    def convert_stream_full_response(  # type: ignore[override]
-        cls,
-        stream_response: Generator[ChatbotAppStreamResponse, None, None],
-    ) -> Generator[str, None, None]:
+    def convert_stream_full_response(
+        cls, stream_response: Generator[AppStreamResponse, None, None]
+    ) -> Generator[dict | str, None, None]:
         """
         Convert stream full response.
         :param stream_response: stream response
@@ -74,7 +67,6 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 yield "ping"
                 continue
 
-            # cdg:构建response_chunk的基础信息，包括事件类型、会话ID、消息ID、创建时间，注意，此时还不包含生成的数据
             response_chunk = {
                 "event": sub_stream_response.event.value,
                 "conversation_id": chunk.conversation_id,
@@ -82,19 +74,17 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 "created_at": chunk.created_at,
             }
 
-            # cdg:将大模型生成的信息添加到response_chunk中，构成完整的输出
             if isinstance(sub_stream_response, ErrorStreamResponse):
                 data = cls._error_to_stream_response(sub_stream_response.err)
                 response_chunk.update(data)
             else:
                 response_chunk.update(sub_stream_response.to_dict())
-            yield json.dumps(response_chunk)
+            yield response_chunk
 
     @classmethod
-    def convert_stream_simple_response(  # type: ignore[override]
-        cls,
-        stream_response: Generator[ChatbotAppStreamResponse, None, None],
-    ) -> Generator[str, None, None]:
+    def convert_stream_simple_response(
+        cls, stream_response: Generator[AppStreamResponse, None, None]
+    ) -> Generator[dict | str, None, None]:
         """
         Convert stream simple response.
         :param stream_response: stream response
@@ -108,7 +98,6 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 yield "ping"
                 continue
 
-            # cdg:构建response_chunk的基础信息，包括事件类型、会话ID、消息ID、创建时间，注意，此时还不包含生成的数据
             response_chunk = {
                 "event": sub_stream_response.event.value,
                 "conversation_id": chunk.conversation_id,
@@ -116,7 +105,6 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
                 "created_at": chunk.created_at,
             }
 
-            # cdg:将大模型生成的信息添加到response_chunk中，构成完整的输出，
             if isinstance(sub_stream_response, MessageEndStreamResponse):
                 sub_stream_response_dict = sub_stream_response.to_dict()
                 metadata = sub_stream_response_dict.get("metadata", {})
@@ -128,4 +116,4 @@ class AgentChatAppGenerateResponseConverter(AppGenerateResponseConverter):
             else:
                 response_chunk.update(sub_stream_response.to_dict())
 
-            yield json.dumps(response_chunk)
+            yield response_chunk

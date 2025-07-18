@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic.fields import FieldInfo
 
-# cdg: 远程配置源基类，用于实现从远程配置中心获取配置信息。
+
 class RemoteSettingsSource:
     def __init__(self, configs: Mapping[str, Any]):
         pass

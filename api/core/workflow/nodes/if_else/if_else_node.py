@@ -5,17 +5,21 @@ from typing_extensions import deprecated
 
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.nodes.base import BaseNode
 from core.workflow.nodes.enums import NodeType
 from core.workflow.nodes.if_else.entities import IfElseNodeData
 from core.workflow.utils.condition.entities import Condition
 from core.workflow.utils.condition.processor import ConditionProcessor
-from models.workflow import WorkflowNodeExecutionStatus
 
 
 class IfElseNode(BaseNode[IfElseNodeData]):
     _node_data_cls = IfElseNodeData
     _node_type = NodeType.IF_ELSE
+
+    @classmethod
+    def version(cls) -> str:
+        return "1"
 
     def _run(self) -> NodeRunResult:
         """
@@ -96,14 +100,13 @@ class IfElseNode(BaseNode[IfElseNodeData]):
         node_id: str,
         node_data: IfElseNodeData,
     ) -> Mapping[str, Sequence[str]]:
-        """
-        Extract variable selector to variable mapping
-        :param graph_config: graph config
-        :param node_id: node id
-        :param node_data: node data
-        :return:
-        """
-        return {}
+        var_mapping: dict[str, list[str]] = {}
+        for case in node_data.cases or []:
+            for condition in case.conditions:
+                key = "{}.#{}#".format(node_id, ".".join(condition.variable_selector))
+                var_mapping[key] = condition.variable_selector
+
+        return var_mapping
 
 
 @deprecated("This function is deprecated. You should use the new cases structure.")

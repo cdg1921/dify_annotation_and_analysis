@@ -1,3 +1,5 @@
+import logging
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Optional
 
@@ -13,7 +15,9 @@ from extensions.ext_database import db
 from extensions.ext_redis import redis_client
 from models.dataset import Dataset, Whitelist
 
-# cdg:AbstractVectorFactory类是一个抽象工厂，用于创建各种类型的向量存储。
+logger = logging.getLogger(__name__)
+
+
 class AbstractVectorFactory(ABC):
     @abstractmethod
     def init_vector(self, dataset: Dataset, attributes: list, embeddings: Embeddings) -> BaseVector:
@@ -25,7 +29,6 @@ class AbstractVectorFactory(ABC):
         return index_struct_dict
 
 
-# cdg:在Vector类中，_init_vector方法用于初始化向量存储，根据指定的向量存储类型，选择对应的向量存储工厂，并调用其init_vector方法创建向量存储实例。
 class Vector:
     def __init__(self, dataset: Dataset, attributes: Optional[list] = None):
         if attributes is None:
@@ -36,13 +39,11 @@ class Vector:
         self._vector_processor = self._init_vector()
 
     def _init_vector(self) -> BaseVector:
-        # cdg:向量库的类型在配置文件中由VECTOR_STORE变量指定
         vector_type = dify_config.VECTOR_STORE
 
         if self._dataset.index_struct_dict:
             vector_type = self._dataset.index_struct_dict["type"]
         else:
-
             if dify_config.VECTOR_STORE_WHITELIST_ENABLE:
                 whitelist = (
                     db.session.query(Whitelist)
@@ -58,10 +59,8 @@ class Vector:
         vector_factory_cls = self.get_vector_factory(vector_type)
         return vector_factory_cls().init_vector(self._dataset, self._attributes, self._embeddings)
 
-    # cdg:DIFY确定向量库供应商的方式与确定模型供应商的方式不一样，前者以match的方式指定，后者以读取本地配置文件的方式实现。
     @staticmethod
     def get_vector_factory(vector_type: str) -> type[AbstractVectorFactory]:
-        # cdg:DIFY在确定向量库供应商时，采用match的方式，而不是读取本地配置文件。
         match vector_type:
             case VectorType.CHROMA:
                 from core.rag.datasource.vdb.chroma.chroma_vector import ChromaVectorFactory
@@ -79,6 +78,10 @@ class Vector:
                 from core.rag.datasource.vdb.pgvector.pgvector import PGVectorFactory
 
                 return PGVectorFactory
+            case VectorType.VASTBASE:
+                from core.rag.datasource.vdb.pyvastbase.vastbase_vector import VastbaseVectorFactory
+
+                return VastbaseVectorFactory
             case VectorType.PGVECTO_RS:
                 from core.rag.datasource.vdb.pgvecto_rs.pgvecto_rs import PGVectoRSFactory
 
@@ -153,26 +156,49 @@ class Vector:
                 from core.rag.datasource.vdb.oceanbase.oceanbase_vector import OceanBaseVectorFactory
 
                 return OceanBaseVectorFactory
+            case VectorType.OPENGAUSS:
+                from core.rag.datasource.vdb.opengauss.opengauss import OpenGaussFactory
+
+                return OpenGaussFactory
+            case VectorType.TABLESTORE:
+                from core.rag.datasource.vdb.tablestore.tablestore_vector import TableStoreVectorFactory
+
+                return TableStoreVectorFactory
+            case VectorType.HUAWEI_CLOUD:
+                from core.rag.datasource.vdb.huawei.huawei_cloud_vector import HuaweiCloudVectorFactory
+
+                return HuaweiCloudVectorFactory
+            case VectorType.MATRIXONE:
+                from core.rag.datasource.vdb.matrixone.matrixone_vector import MatrixoneVectorFactory
+
+                return MatrixoneVectorFactory
             case _:
                 raise ValueError(f"Vector store {vector_type} is not supported.")
 
-    # cdg:以下函数具体实现详看CacheEmbedding和向量库供应商具体实例，其中self._embeddings是CacheEmbedding的实例，CacheEmbedding实现对document（文本段）和query的向量化
-    # cdg:self._vector_processor详看get_vector_factory中对应的供应商实例
     def create(self, texts: Optional[list] = None, **kwargs):
         if texts:
-            embeddings = self._embeddings.embed_documents([document.page_content for document in texts])
-            # cdg:向量供应商的create函数，首先检查向量库（collection）是否存在，如果存在，则将Embedding数据入库，如果不存在，则先创建collection，并将collection的
-            self._vector_processor.create(texts=texts, embeddings=embeddings, **kwargs)
+            start = time.time()
+            logger.info(f"start embedding {len(texts)} texts {start}")
+            batch_size = 1000
+            total_batches = len(texts) + batch_size - 1
+            for i in range(0, len(texts), batch_size):
+                batch = texts[i : i + batch_size]
+                batch_start = time.time()
+                logger.info(f"Processing batch {i // batch_size + 1}/{total_batches} ({len(batch)} texts)")
+                batch_embeddings = self._embeddings.embed_documents([document.page_content for document in batch])
+                logger.info(
+                    f"Embedding batch {i // batch_size + 1}/{total_batches} took {time.time() - batch_start:.3f}s"
+                )
+                self._vector_processor.create(texts=batch, embeddings=batch_embeddings, **kwargs)
+            logger.info(f"Embedding {len(texts)} texts took {time.time() - start:.3f}s")
 
     def add_texts(self, documents: list[Document], **kwargs):
         if kwargs.get("duplicate_check", False):
             documents = self._filter_duplicate_texts(documents)
 
-        #cdg:将每个文本块向量化并加入到数据库中
         embeddings = self._embeddings.embed_documents([document.page_content for document in documents])
         self._vector_processor.create(texts=documents, embeddings=embeddings, **kwargs)
 
-    # cdg:如果文本块已经存在，则不重复加入数据库
     def text_exists(self, id: str) -> bool:
         return self._vector_processor.text_exists(id)
 
@@ -205,7 +231,6 @@ class Vector:
             model_type=ModelType.TEXT_EMBEDDING,
             model=self._dataset.embedding_model,
         )
-        # cdg:返回CacheEmbedding实例，CacheEmbedding示例可以实现将document和query转为Embedding
         return CacheEmbedding(embedding_model)
 
     def _filter_duplicate_texts(self, texts: list[Document]) -> list[Document]:

@@ -12,6 +12,7 @@ from core.app.entities.app_invoke_entities import (
 from core.workflow.callbacks import WorkflowCallback, WorkflowLoggingCallback
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.enums import SystemVariableKey
+from core.workflow.variable_loader import VariableLoader
 from core.workflow.workflow_entry import WorkflowEntry
 from extensions.ext_database import db
 from models.enums import UserFrom
@@ -30,6 +31,7 @@ class WorkflowAppRunner(WorkflowBasedAppRunner):
         self,
         application_generate_entity: WorkflowAppGenerateEntity,
         queue_manager: AppQueueManager,
+        variable_loader: VariableLoader,
         workflow_thread_pool_id: Optional[str] = None,
     ) -> None:
         """
@@ -37,16 +39,16 @@ class WorkflowAppRunner(WorkflowBasedAppRunner):
         :param queue_manager: application queue manager
         :param workflow_thread_pool_id: workflow thread pool id
         """
+        super().__init__(queue_manager, variable_loader)
         self.application_generate_entity = application_generate_entity
-        self.queue_manager = queue_manager
         self.workflow_thread_pool_id = workflow_thread_pool_id
+
+    def _get_app_id(self) -> str:
+        return self.application_generate_entity.app_config.app_id
 
     def run(self) -> None:
         """
         Run application
-        :param application_generate_entity: application generate entity
-        :param queue_manager: application queue manager
-        :return:
         """
         app_config = self.application_generate_entity.app_config
         app_config = cast(WorkflowAppConfig, app_config)
@@ -81,6 +83,13 @@ class WorkflowAppRunner(WorkflowBasedAppRunner):
                 node_id=self.application_generate_entity.single_iteration_run.node_id,
                 user_inputs=self.application_generate_entity.single_iteration_run.inputs,
             )
+        elif self.application_generate_entity.single_loop_run:
+            # if only single loop run is requested
+            graph, variable_pool = self._get_graph_and_variable_pool_of_single_loop(
+                workflow=workflow,
+                node_id=self.application_generate_entity.single_loop_run.node_id,
+                user_inputs=self.application_generate_entity.single_loop_run.inputs,
+            )
         else:
             inputs = self.application_generate_entity.inputs
             files = self.application_generate_entity.files
@@ -91,7 +100,7 @@ class WorkflowAppRunner(WorkflowBasedAppRunner):
                 SystemVariableKey.USER_ID: user_id,
                 SystemVariableKey.APP_ID: app_config.app_id,
                 SystemVariableKey.WORKFLOW_ID: app_config.workflow_id,
-                SystemVariableKey.WORKFLOW_RUN_ID: self.application_generate_entity.workflow_run_id,
+                SystemVariableKey.WORKFLOW_EXECUTION_ID: self.application_generate_entity.workflow_execution_id,
             }
 
             variable_pool = VariablePool(

@@ -1,12 +1,12 @@
 import logging
 from abc import abstractmethod
 from collections.abc import Generator, Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, Union, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional, TypeVar, Union, cast
 
 from core.workflow.entities.node_entities import NodeRunResult
+from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.nodes.enums import CONTINUE_ON_ERROR_NODE_TYPE, RETRY_ON_ERROR_NODE_TYPE, NodeType
 from core.workflow.nodes.event import NodeEvent, RunCompletedEvent
-from models.workflow import WorkflowNodeExecutionStatus
 
 from .entities import BaseNodeData
 
@@ -20,21 +20,20 @@ logger = logging.getLogger(__name__)
 
 GenericNodeData = TypeVar("GenericNodeData", bound=BaseNodeData)
 
-# cdg:工作流节点基础类，针对单个节点，多个节点连接起来是一个图或者并行模块（parallel）
-# cdg:BaseNode(Generic[GenericNodeData])表明BaseNode实际上继承BaseNodeData,BaseNode只是构建了一个节点的基本属性和方法，一些方法根据节点类型的不同实现方式也不同
+
 class BaseNode(Generic[GenericNodeData]):
-    _node_data_cls: type[BaseNodeData]
-    _node_type: NodeType
+    _node_data_cls: type[GenericNodeData]
+    _node_type: ClassVar[NodeType]
 
     def __init__(
         self,
         id: str,
         config: Mapping[str, Any],
-        graph_init_params: "GraphInitParams",      # cdg:图初始化参数，初始参数
-        graph: "Graph",                            # cdg:图结构实例
-        graph_runtime_state: "GraphRuntimeState",  # cdg:图运行状态
-        previous_node_id: Optional[str] = None,    # cdg:前一个结点ID，对于start节点，前一个结点为None
-        thread_pool_id: Optional[str] = None,      # cdg:线程池ID
+        graph_init_params: "GraphInitParams",
+        graph: "Graph",
+        graph_runtime_state: "GraphRuntimeState",
+        previous_node_id: Optional[str] = None,
+        thread_pool_id: Optional[str] = None,
     ) -> None:
         self.id = id
         self.tenant_id = graph_init_params.tenant_id
@@ -58,7 +57,7 @@ class BaseNode(Generic[GenericNodeData]):
         self.node_id = node_id
 
         node_data = self._node_data_cls.model_validate(config.get("data", {}))
-        self.node_data = cast(GenericNodeData, node_data)
+        self.node_data = node_data
 
     @abstractmethod
     def _run(self) -> NodeRunResult | Generator[Union[NodeEvent, "InNodeEvent"], None, None]:
@@ -83,8 +82,6 @@ class BaseNode(Generic[GenericNodeData]):
             yield RunCompletedEvent(run_result=result)
         else:
             yield from result
-            # cdg:yield from是一个用于从另一个生成器或可迭代对象中委托生成值的语句。它允许一个生成器将其控制权转移到另一个生成器，并将该生成器产生的所有值逐一返回。
-            # result是一个可迭代对象，可能是另一个生成器、列表、元组或任何实现了迭代协议的对象。
 
     @classmethod
     def extract_variable_selector_to_variable_mapping(
@@ -93,21 +90,51 @@ class BaseNode(Generic[GenericNodeData]):
         graph_config: Mapping[str, Any],
         config: Mapping[str, Any],
     ) -> Mapping[str, Sequence[str]]:
-        """
-        Extract variable selector to variable mapping
+        """Extracts references variable selectors from node configuration.
+
+        The `config` parameter represents the configuration for a specific node type and corresponds
+        to the `data` field in the node definition object.
+
+        The returned mapping has the following structure:
+
+            {'1747829548239.#1747829667553.result#': ['1747829667553', 'result']}
+
+        For loop and iteration nodes, the mapping may look like this:
+
+            {
+                "1748332301644.input_selector": ["1748332363630", "result"],
+                "1748332325079.1748332325079.#sys.workflow_id#": ["sys", "workflow_id"],
+            }
+
+        where `1748332301644` is the ID of the loop / iteration node,
+        and `1748332325079` is the ID of the node inside the loop or iteration node.
+
+        Here, the key consists of two parts: the current node ID (provided as the `node_id`
+        parameter to `_extract_variable_selector_to_variable_mapping`) and the variable selector,
+        enclosed in `#` symbols. These two parts are separated by a dot (`.`).
+
+        The value is a list of string representing the variable selector, where the first element is the node ID
+        of the referenced variable, and the second element is the variable name within that node.
+
+        The meaning of the above response is:
+
+        The node with ID `1747829548239` references the variable `result` from the node with
+        ID `1747829667553`. For example, if `1747829548239` is a LLM node, its prompt may contain a
+        reference to the `result` output variable of node `1747829667553`.
+
         :param graph_config: graph config
         :param config: node config
         :return:
         """
-        # cdg:extract_variable_selector_to_variable_mapping函数输出示例：{'node_id':['node_id', 'query', 'name'], 'node_id':['node_id', 'query', 'age']}
         node_id = config.get("id")
         if not node_id:
             raise ValueError("Node ID is required when extracting variable selector to variable mapping.")
 
         node_data = cls._node_data_cls(**config.get("data", {}))
-        return cls._extract_variable_selector_to_variable_mapping(
+        data = cls._extract_variable_selector_to_variable_mapping(
             graph_config=graph_config, node_id=node_id, node_data=cast(GenericNodeData, node_data)
         )
+        return data
 
     @classmethod
     def _extract_variable_selector_to_variable_mapping(
@@ -142,6 +169,16 @@ class BaseNode(Generic[GenericNodeData]):
         :return:
         """
         return self._node_type
+
+    @classmethod
+    @abstractmethod
+    def version(cls) -> str:
+        """`node_version` returns the version of current node type."""
+        # NOTE(QuantumGhost): This should be in sync with `NODE_TYPE_CLASSES_MAPPING`.
+        #
+        # If you have introduced a new node type, please add it to `NODE_TYPE_CLASSES_MAPPING`
+        # in `api/core/workflow/nodes/__init__.py`.
+        raise NotImplementedError("subclasses of BaseNode must implement `version` method.")
 
     @property
     def should_continue_on_error(self) -> bool:

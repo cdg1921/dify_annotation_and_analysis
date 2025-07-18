@@ -3,18 +3,17 @@ from extensions.ext_database import db
 from models.dataset import AppDatasetJoin
 from models.model import AppModelConfig
 
-# cdg: 使用@app_model_config_was_updated.connect装饰器，将handle函数注册为应用模型配置更新事件的处理器。
+
 @app_model_config_was_updated.connect
-def handle(sender, **kwargs): # cdg: 处理应用模型配置更新事件，sender是应用对象，kwargs是事件参数   
-    app = sender # cdg: 获取应用对象
-    app_model_config = kwargs.get("app_model_config") # cdg: 获取应用模型配置
-    if app_model_config is None: # cdg: 如果应用模型配置为空，则返回
+def handle(sender, **kwargs):
+    app = sender
+    app_model_config = kwargs.get("app_model_config")
+    if app_model_config is None:
         return
 
-    dataset_ids = get_dataset_ids_from_model_config(app_model_config) # cdg: 获取数据集ID列表
+    dataset_ids = get_dataset_ids_from_model_config(app_model_config)
 
-    # cdg: 获取应用数据集关联
-    app_dataset_joins = db.session.query(AppDatasetJoin).filter(AppDatasetJoin.app_id == app.id).all() # cdg: 获取应用数据集关联
+    app_dataset_joins = db.session.query(AppDatasetJoin).filter(AppDatasetJoin.app_id == app.id).all()
 
     removed_dataset_ids: set[str] = set()
     if not app_dataset_joins:

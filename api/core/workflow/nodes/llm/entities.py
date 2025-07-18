@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from core.model_runtime.entities import ImagePromptMessageContent
+from core.model_runtime.entities import ImagePromptMessageContent, LLMMode
 from core.prompt.entities.advanced_prompt_entities import ChatModelMessage, CompletionModelPromptTemplate, MemoryConfig
 from core.workflow.entities.variable_entities import VariableSelector
 from core.workflow.nodes.base import BaseNodeData
@@ -12,7 +12,7 @@ from core.workflow.nodes.base import BaseNodeData
 class ModelConfig(BaseModel):
     provider: str
     name: str
-    mode: str
+    mode: LLMMode
     completion_params: dict[str, Any] = {}
 
 
@@ -65,6 +65,9 @@ class LLMNodeData(BaseNodeData):
     memory: Optional[MemoryConfig] = None
     context: ContextConfig
     vision: VisionConfig = Field(default_factory=VisionConfig)
+    structured_output: dict | None = None
+    # We used 'structured_output_enabled' in the past, but it's not a good name.
+    structured_output_switch_on: bool = Field(False, alias="structured_output_enabled")
 
     @field_validator("prompt_config", mode="before")
     @classmethod
@@ -72,3 +75,7 @@ class LLMNodeData(BaseNodeData):
         if v is None:
             return PromptConfig()
         return v
+
+    @property
+    def structured_output_enabled(self) -> bool:
+        return self.structured_output_switch_on and self.structured_output is not None

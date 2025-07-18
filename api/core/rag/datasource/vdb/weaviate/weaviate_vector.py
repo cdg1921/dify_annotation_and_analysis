@@ -41,6 +41,13 @@ class WeaviateVector(BaseVector):
 
         weaviate.connect.connection.has_grpc = False
 
+        # Fix to minimize the performance impact of the deprecation check in weaviate-client 3.24.0,
+        # by changing the connection timeout to pypi.org from 1 second to 0.001 seconds.
+        # TODO: This can be removed once weaviate-client is updated to 3.26.7 or higher,
+        #       which does not contain the deprecation check.
+        if hasattr(weaviate.connect.connection, "PYPI_TIMEOUT"):
+            weaviate.connect.connection.PYPI_TIMEOUT = 0.001
+
         try:
             client = weaviate.Client(
                 url=config.endpoint, auth_client_secret=auth_config, timeout_config=(5, 60), startup_period=None
@@ -187,8 +194,13 @@ class WeaviateVector(BaseVector):
         query_obj = self._client.query.get(collection_name, properties)
 
         vector = {"vector": query_vector}
-        if kwargs.get("where_filter"):
-            query_obj = query_obj.with_where(kwargs.get("where_filter"))
+        document_ids_filter = kwargs.get("document_ids_filter")
+        if document_ids_filter:
+            operands = []
+            for document_id_filter in document_ids_filter:
+                operands.append({"path": ["document_id"], "operator": "Equal", "valueText": document_id_filter})
+            where_filter = {"operator": "Or", "operands": operands}
+            query_obj = query_obj.with_where(where_filter)
         result = (
             query_obj.with_near_vector(vector)
             .with_limit(kwargs.get("top_k", 4))
@@ -221,7 +233,6 @@ class WeaviateVector(BaseVector):
 
         Args:
             query: Text to look up documents similar to.
-            k: Number of Documents to return. Defaults to 4.
 
         Returns:
             List of Documents most similar to the query.
@@ -233,8 +244,13 @@ class WeaviateVector(BaseVector):
         if kwargs.get("search_distance"):
             content["certainty"] = kwargs.get("search_distance")
         query_obj = self._client.query.get(collection_name, properties)
-        if kwargs.get("where_filter"):
-            query_obj = query_obj.with_where(kwargs.get("where_filter"))
+        document_ids_filter = kwargs.get("document_ids_filter")
+        if document_ids_filter:
+            operands = []
+            for document_id_filter in document_ids_filter:
+                operands.append({"path": ["document_id"], "operator": "Equal", "valueText": document_id_filter})
+            where_filter = {"operator": "Or", "operands": operands}
+            query_obj = query_obj.with_where(where_filter)
         query_obj = query_obj.with_additional(["vector"])
         properties = ["text"]
         result = query_obj.with_bm25(query=query, properties=properties).with_limit(kwargs.get("top_k", 4)).do()

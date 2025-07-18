@@ -28,6 +28,8 @@ const translation = {
       delete: 'Excluir',
       enableWarning: 'O arquivo arquivado não pode ser habilitado',
       sync: 'Sincronizar',
+      resume: 'Retomar',
+      pause: 'Pausa',
     },
     index: {
       enable: 'Habilitar',
@@ -133,7 +135,7 @@ const translation = {
         language: 'Idioma',
         authorPublisher: 'Autor/Editor',
         publishDate: 'Data de Publicação',
-        topicsKeywords: 'Tópicos/Palavras-chave',
+        topicKeywords: 'Tópicos/Palavras-chave',
         description: 'Descrição',
       },
       paper: {
@@ -389,6 +391,8 @@ const translation = {
     newChildChunk: 'Novo pedaço filho',
     characters_one: 'personagem',
     parentChunk: 'Pedaço pai',
+    keywordEmpty: 'A palavra-chave não pode estar vazia',
+    keywordDuplicate: 'A palavra-chave já existe',
   },
 }
 

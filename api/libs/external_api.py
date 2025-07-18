@@ -3,13 +3,13 @@ import sys
 from typing import Any
 
 from flask import current_app, got_request_exception
-from flask_restful import Api, http_status_message  # type: ignore
+from flask_restful import Api, http_status_message
 from werkzeug.datastructures import Headers
 from werkzeug.exceptions import HTTPException
 
 from core.errors.error import AppInvokeQuotaExceededError
 
-# cdg: 定义外部API类，继承自flask_restful的Api类，重写handle_error方法，丰富Flask响应错误处理方式
+
 class ExternalApi(Api):
     def handle_error(self, e):
         """Error handler for the API transforms a raised exception into a Flask

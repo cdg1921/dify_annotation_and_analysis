@@ -1,71 +1,136 @@
+import hashlib
 import logging
 import os
 from collections.abc import Sequence
+from threading import Lock
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-from core.helper.module_import_helper import load_single_subclass_from_source
+import contexts
 from core.helper.position_helper import get_provider_position_map, sort_to_dict_by_position_map
-from core.model_runtime.entities.model_entities import ModelType
+from core.model_runtime.entities.model_entities import AIModelEntity, ModelType
 from core.model_runtime.entities.provider_entities import ProviderConfig, ProviderEntity, SimpleProviderEntity
-from core.model_runtime.model_providers.__base.model_provider import ModelProvider
+from core.model_runtime.model_providers.__base.ai_model import AIModel
+from core.model_runtime.model_providers.__base.large_language_model import LargeLanguageModel
+from core.model_runtime.model_providers.__base.moderation_model import ModerationModel
+from core.model_runtime.model_providers.__base.rerank_model import RerankModel
+from core.model_runtime.model_providers.__base.speech2text_model import Speech2TextModel
+from core.model_runtime.model_providers.__base.text_embedding_model import TextEmbeddingModel
+from core.model_runtime.model_providers.__base.tts_model import TTSModel
 from core.model_runtime.schema_validators.model_credential_schema_validator import ModelCredentialSchemaValidator
 from core.model_runtime.schema_validators.provider_credential_schema_validator import ProviderCredentialSchemaValidator
+from core.plugin.entities.plugin import ModelProviderID
+from core.plugin.entities.plugin_daemon import PluginModelProviderEntity
+from core.plugin.impl.asset import PluginAssetManager
+from core.plugin.impl.model import PluginModelClient
 
 logger = logging.getLogger(__name__)
 
 
 class ModelProviderExtension(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    provider_instance: ModelProvider
-    name: str
+    plugin_model_provider_entity: PluginModelProviderEntity
     position: Optional[int] = None
 
 
 class ModelProviderFactory:
-    # cdg:{provider_name:ModelProviderExtension}
-    model_provider_extensions: Optional[dict[str, ModelProviderExtension]] = None
+    provider_position_map: dict[str, int]
 
-    def __init__(self) -> None:
-        # for cache in memory
-        self.get_providers()
+    def __init__(self, tenant_id: str) -> None:
+        self.provider_position_map = {}
+
+        self.tenant_id = tenant_id
+        self.plugin_model_manager = PluginModelClient()
+
+        if not self.provider_position_map:
+            # get the path of current classes
+            current_path = os.path.abspath(__file__)
+            model_providers_path = os.path.dirname(current_path)
+
+            # get _position.yaml file path
+            self.provider_position_map = get_provider_position_map(model_providers_path)
 
     def get_providers(self) -> Sequence[ProviderEntity]:
         """
         Get all providers
         :return: list of providers
         """
-        # scan all providers
-        # cdg:{provider_name:model_provider_extension}
-        model_provider_extensions = self._get_model_provider_map()
+        # Fetch plugin model providers
+        plugin_providers = self.get_plugin_model_providers()
 
-        # traverse all model_provider_extensions
-        providers = []
-        # cdg:对于每一个供应商model_provider_extension
-        for model_provider_extension in model_provider_extensions.values():
-            # cdg:从model_provider_extension中获取model_provider_instance
-            # get model_provider instance
-            model_provider_instance = model_provider_extension.provider_instance
+        # Convert PluginModelProviderEntity to ModelProviderExtension
+        model_provider_extensions = []
+        for provider in plugin_providers:
+            model_provider_extensions.append(ModelProviderExtension(plugin_model_provider_entity=provider))
 
-            # cdg:获取供应商配置信息provider_schema，从provider_schema中获取供应商支持的模型类别supported_model_types，如llm、Embedding
-            # get provider schema
-            provider_schema = model_provider_instance.get_provider_schema()
+        sorted_extensions = sort_to_dict_by_position_map(
+            position_map=self.provider_position_map,
+            data=model_provider_extensions,
+            name_func=lambda x: x.plugin_model_provider_entity.declaration.provider,
+        )
 
-            for model_type in provider_schema.supported_model_types:
-                # get predefined models for given model type
-                # cdg:遍历供应商目录下所有获取预置模型
-                models = model_provider_instance.models(model_type)
-                if models:
-                    # cdg:将预置模型填充到provider_schema中，实例化了供应商模型信息
-                    provider_schema.models.extend(models)
+        return [extension.plugin_model_provider_entity.declaration for extension in sorted_extensions.values()]
 
-            providers.append(provider_schema)
+    def get_plugin_model_providers(self) -> Sequence[PluginModelProviderEntity]:
+        """
+        Get all plugin model providers
+        :return: list of plugin model providers
+        """
+        # check if context is set
+        try:
+            contexts.plugin_model_providers.get()
+        except LookupError:
+            contexts.plugin_model_providers.set(None)
+            contexts.plugin_model_providers_lock.set(Lock())
 
-        # cdg:providers是所有供应商provider_schema列表，provider_schema来源于每个供应商目录下的yaml文件，并补充了预定于的AI模型信息
-        # return providers
-        return providers
+        with contexts.plugin_model_providers_lock.get():
+            plugin_model_providers = contexts.plugin_model_providers.get()
+            if plugin_model_providers is not None:
+                return plugin_model_providers
+
+            plugin_model_providers = []
+            contexts.plugin_model_providers.set(plugin_model_providers)
+
+            # Fetch plugin model providers
+            plugin_providers = self.plugin_model_manager.fetch_model_providers(self.tenant_id)
+
+            for provider in plugin_providers:
+                provider.declaration.provider = provider.plugin_id + "/" + provider.declaration.provider
+                plugin_model_providers.append(provider)
+
+            return plugin_model_providers
+
+    def get_provider_schema(self, provider: str) -> ProviderEntity:
+        """
+        Get provider schema
+        :param provider: provider name
+        :return: provider schema
+        """
+        plugin_model_provider_entity = self.get_plugin_model_provider(provider=provider)
+        return plugin_model_provider_entity.declaration
+
+    def get_plugin_model_provider(self, provider: str) -> PluginModelProviderEntity:
+        """
+        Get plugin model provider
+        :param provider: provider name
+        :return: provider schema
+        """
+        if "/" not in provider:
+            provider = str(ModelProviderID(provider))
+
+        # fetch plugin model providers
+        plugin_model_provider_entities = self.get_plugin_model_providers()
+
+        # get the provider
+        plugin_model_provider_entity = next(
+            (p for p in plugin_model_provider_entities if p.declaration.provider == provider),
+            None,
+        )
+
+        if not plugin_model_provider_entity:
+            raise ValueError(f"Invalid provider: {provider}")
+
+        return plugin_model_provider_entity
 
     def provider_credentials_validate(self, *, provider: str, credentials: dict) -> dict:
         """
@@ -75,26 +140,26 @@ class ModelProviderFactory:
         :param credentials: provider credentials, credentials form defined in `provider_credential_schema`.
         :return:
         """
-        # get the provider instance
-        model_provider_instance = self.get_provider_instance(provider)
-
-        # get provider schema
-        provider_schema = model_provider_instance.get_provider_schema()
+        # fetch plugin model provider
+        plugin_model_provider_entity = self.get_plugin_model_provider(provider=provider)
 
         # get provider_credential_schema and validate credentials according to the rules
-        provider_credential_schema = provider_schema.provider_credential_schema
-
+        provider_credential_schema = plugin_model_provider_entity.declaration.provider_credential_schema
         if not provider_credential_schema:
             raise ValueError(f"Provider {provider} does not have provider_credential_schema")
 
         # validate provider credential schema
-        # cdg:获取yaml文件中预定于的provider_credential_schema
         validator = ProviderCredentialSchemaValidator(provider_credential_schema)
-        # cdg:将用户提供的credentials与预置的provider_credential_schema对比，验证用户提供的credentials的有效性
         filtered_credentials = validator.validate_and_filter(credentials)
 
         # validate the credentials, raise exception if validation failed
-        model_provider_instance.validate_provider_credentials(filtered_credentials)
+        self.plugin_model_manager.validate_provider_credentials(
+            tenant_id=self.tenant_id,
+            user_id="unknown",
+            plugin_id=plugin_model_provider_entity.plugin_id,
+            provider=plugin_model_provider_entity.provider,
+            credentials=filtered_credentials,
+        )
 
         return filtered_credentials
 
@@ -110,20 +175,11 @@ class ModelProviderFactory:
         :param credentials: model credentials, credentials form defined in `model_credential_schema`.
         :return:
         """
-        # cdg:实现思路与provider_credentials_validate一样，先获取model_provider_instance，
-        # 再从model_provider_instance获取provider_schema，再从provider_schema获取model_credential_schema
-        # 然后根据model_credential_schema对用户输入的credentials进行验证和过滤
-        # 最后根据指定的模型实例，对模型的credentials进行验证
-
-        # get the provider instance
-        model_provider_instance = self.get_provider_instance(provider)
-
-        # get provider schema
-        provider_schema = model_provider_instance.get_provider_schema()
+        # fetch plugin model provider
+        plugin_model_provider_entity = self.get_plugin_model_provider(provider=provider)
 
         # get model_credential_schema and validate credentials according to the rules
-        model_credential_schema = provider_schema.model_credential_schema
-
+        model_credential_schema = plugin_model_provider_entity.declaration.model_credential_schema
         if not model_credential_schema:
             raise ValueError(f"Provider {provider} does not have model_credential_schema")
 
@@ -131,13 +187,55 @@ class ModelProviderFactory:
         validator = ModelCredentialSchemaValidator(model_type, model_credential_schema)
         filtered_credentials = validator.validate_and_filter(credentials)
 
-        # get model instance of the model type
-        model_instance = model_provider_instance.get_model_instance(model_type)
-
         # call validate_credentials method of model type to validate credentials, raise exception if validation failed
-        model_instance.validate_credentials(model, filtered_credentials)
+        self.plugin_model_manager.validate_model_credentials(
+            tenant_id=self.tenant_id,
+            user_id="unknown",
+            plugin_id=plugin_model_provider_entity.plugin_id,
+            provider=plugin_model_provider_entity.provider,
+            model_type=model_type.value,
+            model=model,
+            credentials=filtered_credentials,
+        )
 
         return filtered_credentials
+
+    def get_model_schema(
+        self, *, provider: str, model_type: ModelType, model: str, credentials: dict
+    ) -> AIModelEntity | None:
+        """
+        Get model schema
+        """
+        plugin_id, provider_name = self.get_plugin_id_and_provider_name_from_provider(provider)
+        cache_key = f"{self.tenant_id}:{plugin_id}:{provider_name}:{model_type.value}:{model}"
+        # sort credentials
+        sorted_credentials = sorted(credentials.items()) if credentials else []
+        cache_key += ":".join([hashlib.md5(f"{k}:{v}".encode()).hexdigest() for k, v in sorted_credentials])
+
+        try:
+            contexts.plugin_model_schemas.get()
+        except LookupError:
+            contexts.plugin_model_schemas.set({})
+            contexts.plugin_model_schema_lock.set(Lock())
+
+        with contexts.plugin_model_schema_lock.get():
+            if cache_key in contexts.plugin_model_schemas.get():
+                return contexts.plugin_model_schemas.get()[cache_key]
+
+            schema = self.plugin_model_manager.get_model_schema(
+                tenant_id=self.tenant_id,
+                user_id="unknown",
+                plugin_id=plugin_id,
+                provider=provider_name,
+                model_type=model_type.value,
+                model=model,
+                credentials=credentials or {},
+            )
+
+            if schema:
+                contexts.plugin_model_schemas.get()[cache_key] = schema
+
+            return schema
 
     def get_models(
         self,
@@ -154,14 +252,11 @@ class ModelProviderFactory:
         :param provider_configs: list of provider configs
         :return: list of models
         """
-        # cdg:供应商配置信息，包括供应商名称、鉴权信息（如base_url、api-Key等）
         provider_configs = provider_configs or []
 
         # scan all providers
-        # cdg:所有供应商字典{provider:model_provider_extensions}
-        model_provider_extensions = self._get_model_provider_map()
+        plugin_model_provider_entities = self.get_plugin_model_providers()
 
-        # cdg:将ProviderConfig实例转为字典
         # convert provider_configs to dict
         provider_credentials_dict = {}
         for provider_config in provider_configs:
@@ -169,37 +264,27 @@ class ModelProviderFactory:
 
         # traverse all model_provider_extensions
         providers = []
-        for name, model_provider_extension in model_provider_extensions.items():
+        for plugin_model_provider_entity in plugin_model_provider_entities:
             # filter by provider if provider is present
-            # cdg:如果指定了供应商，不是指定的供应商直接跳过
-            if provider and name != provider:
+            if provider and plugin_model_provider_entity.declaration.provider != provider:
                 continue
 
-            # get model_provider instance
-            model_provider_instance = model_provider_extension.provider_instance
-
             # get provider schema
-            provider_schema = model_provider_instance.get_provider_schema()
+            provider_schema = plugin_model_provider_entity.declaration
 
-            # cdg:获取供应商支持的模型类型，如llm、Embedding等
             model_types = provider_schema.supported_model_types
             if model_type:
-                # cdg:如果指定了模型类型且不是指定的模型类型，则直接跳过
                 if model_type not in model_types:
                     continue
 
                 model_types = [model_type]
 
-            # cdg: 指定供应商名称和模型类型的预定义模型列表
             all_model_type_models = []
-            for model_type in model_types:
-                # get predefined models for given model type
-                models = model_provider_instance.models(
-                    model_type=model_type,
-                )
+            for model_schema in provider_schema.models:
+                if model_schema.model_type != model_type:
+                    continue
 
-
-                all_model_type_models.extend(models)
+                all_model_type_models.append(model_schema)
 
             simple_provider_schema = provider_schema.to_simple_provider()
             simple_provider_schema.models.extend(all_model_type_models)
@@ -208,105 +293,92 @@ class ModelProviderFactory:
 
         return providers
 
-    def get_provider_instance(self, provider: str) -> ModelProvider:
+    def get_model_type_instance(self, provider: str, model_type: ModelType) -> AIModel:
         """
-        Get provider instance by provider name
+        Get model type instance by provider name and model type
         :param provider: provider name
-        :return: provider instance
+        :param model_type: model type
+        :return: model type instance
         """
-        # scan all providers
-        # cdg:供应商字典{provider:model_provider_extensions,……}
-        model_provider_extensions = self._get_model_provider_map()
+        plugin_id, provider_name = self.get_plugin_id_and_provider_name_from_provider(provider)
+        init_params = {
+            "tenant_id": self.tenant_id,
+            "plugin_id": plugin_id,
+            "provider_name": provider_name,
+            "plugin_model_provider": self.get_plugin_model_provider(provider),
+        }
 
-        # get the provider extension
-        model_provider_extension = model_provider_extensions.get(provider)
-        if not model_provider_extension:
-            raise Exception(f"Invalid provider: {provider}")
+        if model_type == ModelType.LLM:
+            return LargeLanguageModel(**init_params)  # type: ignore
+        elif model_type == ModelType.TEXT_EMBEDDING:
+            return TextEmbeddingModel(**init_params)  # type: ignore
+        elif model_type == ModelType.RERANK:
+            return RerankModel(**init_params)  # type: ignore
+        elif model_type == ModelType.SPEECH2TEXT:
+            return Speech2TextModel(**init_params)  # type: ignore
+        elif model_type == ModelType.MODERATION:
+            return ModerationModel(**init_params)  # type: ignore
+        elif model_type == ModelType.TTS:
+            return TTSModel(**init_params)  # type: ignore
 
-        # get the provider instance
-        model_provider_instance = model_provider_extension.provider_instance
-
-        return model_provider_instance
-
-    def _get_model_provider_map(self) -> dict[str, ModelProviderExtension]:
+    def get_provider_icon(self, provider: str, icon_type: str, lang: str) -> tuple[bytes, str]:
         """
-        Retrieves the model provider map.
-
-        This method retrieves the model provider map, which is a dictionary containing the model provider names as keys
-        and instances of `ModelProviderExtension` as values. The model provider map is used to store information about
-        available model providers.
-
-        Returns:
-            A dictionary containing the model provider map.
-
-        Raises:
-            None.
+        Get provider icon
+        :param provider: provider name
+        :param icon_type: icon type (icon_small or icon_large)
+        :param lang: language (zh_Hans or en_US)
+        :return: provider icon
         """
-        if self.model_provider_extensions:
-            return self.model_provider_extensions
+        # get the provider schema
+        provider_schema = self.get_provider_schema(provider)
 
-        # get the path of current classes
-        # cdg:当前python代码绝对路径，如api/core/model_runtime/model_providers/model_provider_factory.py
-        current_path = os.path.abspath(__file__)
-        # cdg:当前python代码所在目录，如api/core/model_runtime/model_providers/
-        model_providers_path = os.path.dirname(current_path)
+        if icon_type.lower() == "icon_small":
+            if not provider_schema.icon_small:
+                raise ValueError(f"Provider {provider} does not have small icon.")
 
-        # get all folders path under model_providers_path that do not start with __
-        # cdg:获取所有供应商目录，如[api/core/model_runtime/model_providers/anthropic, api/core/model_runtime/model_providers/openai, ……]
-        model_provider_dir_paths = [
-            os.path.join(model_providers_path, model_provider_dir)
-            for model_provider_dir in os.listdir(model_providers_path)
-            if not model_provider_dir.startswith("__")
-            and os.path.isdir(os.path.join(model_providers_path, model_provider_dir))
-        ]
+            if lang.lower() == "zh_hans":
+                file_name = provider_schema.icon_small.zh_Hans
+            else:
+                file_name = provider_schema.icon_small.en_US
+        else:
+            if not provider_schema.icon_large:
+                raise ValueError(f"Provider {provider} does not have large icon.")
 
-        # get _position.yaml file path
-        # cdg:{name:index,……}
-        position_map = get_provider_position_map(model_providers_path)
+            if lang.lower() == "zh_hans":
+                file_name = provider_schema.icon_large.zh_Hans
+            else:
+                file_name = provider_schema.icon_large.en_US
 
-        # traverse all model_provider_dir_paths
-        model_providers: list[ModelProviderExtension] = []
-        for model_provider_dir_path in model_provider_dir_paths:
-            # get model_provider dir name
-            # cdg:获取供应商名称，如anthropic、openai等
-            model_provider_name = os.path.basename(model_provider_dir_path)
+        if not file_name:
+            raise ValueError(f"Provider {provider} does not have icon.")
 
-            # cdg:供应商目录下所有文件
-            file_names = os.listdir(model_provider_dir_path)
+        image_mime_types = {
+            "jpg": "image/jpeg",
+            "jpeg": "image/jpeg",
+            "png": "image/png",
+            "gif": "image/gif",
+            "bmp": "image/bmp",
+            "tiff": "image/tiff",
+            "tif": "image/tiff",
+            "webp": "image/webp",
+            "svg": "image/svg+xml",
+            "ico": "image/vnd.microsoft.icon",
+            "heif": "image/heif",
+            "heic": "image/heic",
+        }
 
-            if (model_provider_name + ".py") not in file_names:
-                logger.warning(f"Missing {model_provider_name}.py file in {model_provider_dir_path}, Skip.")
-                continue
+        extension = file_name.split(".")[-1]
+        mime_type = image_mime_types.get(extension, "image/png")
 
-            # Dynamic loading {model_provider_name}.py file and find the subclass of ModelProvider
-            # cdg:供应商目录下同名python代码文件，如api/core/model_runtime/model_providers/anthropic/anthropic.py
-            py_path = os.path.join(model_provider_dir_path, model_provider_name + ".py")
-            # cdg:加载供应商模型类名称，如AnthropicProvider
-            model_provider_class = load_single_subclass_from_source(
-                module_name=f"core.model_runtime.model_providers.{model_provider_name}.{model_provider_name}",
-                script_path=py_path,
-                parent_type=ModelProvider,
-            )
+        # get icon bytes from plugin asset manager
+        plugin_asset_manager = PluginAssetManager()
+        return plugin_asset_manager.fetch_asset(tenant_id=self.tenant_id, id=file_name), mime_type
 
-            if not model_provider_class:
-                logger.warning(f"Missing Model Provider Class that extends ModelProvider in {py_path}, Skip.")
-                continue
-            # cdg:缺乏.py文件，无法获取模型类名，直接报错；缺乏.yaml文件，还可以初始化，但缺乏参数
-            if f"{model_provider_name}.yaml" not in file_names:
-                logger.warning(f"Missing {model_provider_name}.yaml file in {model_provider_dir_path}, Skip.")
-                continue
-
-            model_providers.append(
-                ModelProviderExtension(
-                    name=model_provider_name,
-                    provider_instance=model_provider_class(),
-                    position=position_map.get(model_provider_name),
-                )
-            )
-        
-        # cdg:根据api/core/model_runtime/model_providers/_position.yaml中的顺序进行排序
-        sorted_extensions = sort_to_dict_by_position_map(position_map, model_providers, lambda x: x.name)
-
-        self.model_provider_extensions = sorted_extensions
-
-        return sorted_extensions
+    def get_plugin_id_and_provider_name_from_provider(self, provider: str) -> tuple[str, str]:
+        """
+        Get plugin id and provider name from provider name
+        :param provider: provider name
+        :return: plugin id and provider name
+        """
+        provider_id = ModelProviderID(provider)
+        return provider_id.plugin_id, provider_id.provider_name

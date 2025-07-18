@@ -103,7 +103,7 @@ const translation = {
       edit: 'Edit annotation',
     },
     dataSet: {
-      title: 'Context',
+      title: 'Knowledge',
       noData: 'You can import Knowledge as context',
       words: 'Words',
       textBlocks: 'Text Blocks',
@@ -221,6 +221,10 @@ const translation = {
     documentUpload: {
       title: 'Document',
       description: 'Enable Document will allows the model to take in documents and answer questions about them.',
+    },
+    audioUpload: {
+      title: 'Audio',
+      description: 'Enable Audio will allow the model to process audio files for transcription and analysis.',
     },
   },
   codegen: {
@@ -368,6 +372,7 @@ const translation = {
     'inputPlaceholder': 'Please input',
     'content': 'Content',
     'required': 'Required',
+    'hide': 'Hide',
     'file': {
       supportFileTypes: 'Support File Types',
       image: {
@@ -441,6 +446,7 @@ const translation = {
     writeOpener: 'Edit opener',
     placeholder: 'Write your opener message here, you can use variables, try type {{variable}}.',
     openingQuestion: 'Opening Questions',
+    openingQuestionPlaceholder: 'You can use variables, try typing {{variable}}.',
     noDataPlaceHolder:
       'Starting the conversation with the user can help AI establish a closer connection with them in conversational applications.',
     varTip: 'You can use variables, try type {{variable}}',
@@ -481,8 +487,9 @@ const translation = {
     },
     retrieveMultiWay: {
       title: 'Multi-path retrieval',
-      description: 'Based on user intent, queries across all Knowledge, retrieves relevant text from multi-sources, and selects the best results matching the user query after reranking. ',
+      description: 'Based on user intent, queries across all Knowledge, retrieves relevant text from multi-sources, and selects the best results matching the user query after reranking.',
     },
+    embeddingModelRequired: 'A configured Embedding Model is required',
     rerankModelRequired: 'A configured Rerank Model is required',
     params: 'Params',
     top_k: 'Top K',

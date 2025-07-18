@@ -7,10 +7,12 @@ import type {
   WeightedScoreEnum,
 } from '@/models/datasets'
 import type { UploadFileSetting } from '@/app/components/workflow/types'
+import type { AccessMode } from '@/models/access-control'
 
 export enum Theme {
   light = 'light',
   dark = 'dark',
+  system = 'system',
 }
 
 export enum ProviderType {
@@ -25,14 +27,14 @@ export enum ProviderType {
 }
 
 export enum AppType {
-  'chat' = 'chat',
-  'completion' = 'completion',
+  chat = 'chat',
+  completion = 'completion',
 }
 
 export enum ModelModeType {
-  'chat' = 'chat',
-  'completion' = 'completion',
-  'unset' = '',
+  chat = 'chat',
+  completion = 'completion',
+  unset = '',
 }
 
 export enum RETRIEVE_TYPE {
@@ -88,6 +90,7 @@ export type TextTypeFormItem = {
   variable: string
   required: boolean
   max_length: number
+  hide: boolean
 }
 
 export type SelectTypeFormItem = {
@@ -96,6 +99,7 @@ export type SelectTypeFormItem = {
   variable: string
   required: boolean
   options: string[]
+  hide: boolean
 }
 
 export type ParagraphTypeFormItem = {
@@ -103,6 +107,7 @@ export type ParagraphTypeFormItem = {
   label: string
   variable: string
   required: boolean
+  hide: boolean
 }
 /**
  * User Input Form Item
@@ -110,9 +115,9 @@ export type ParagraphTypeFormItem = {
 export type UserInputFormItem = {
   'text-input': TextTypeFormItem
 } | {
-  'select': SelectTypeFormItem
+  select: SelectTypeFormItem
 } | {
-  'paragraph': TextTypeFormItem
+  paragraph: TextTypeFormItem
 }
 
 export type AgentTool = {
@@ -314,6 +319,8 @@ export type App = {
   name: string
   /** Description */
   description: string
+  /** Author Name */
+  author_name: string;
 
   /**
    * Icon Type
@@ -346,11 +353,22 @@ export type App = {
   app_model_config: ModelConfig
   /** Timestamp of creation */
   created_at: number
+  /** Timestamp of update */
+  updated_at: number
   /** Web Application Configuration */
   site: SiteConfig
   /** api site url */
   api_base_url: string
   tags: Tag[]
+  workflow?: {
+    id: string
+    created_at: number
+    created_by?: string
+    updated_at: number
+    updated_by?: string
+  }
+  /** access control */
+  access_mode: AccessMode
 }
 
 export type AppSSO = {

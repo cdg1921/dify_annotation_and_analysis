@@ -7,26 +7,23 @@ from flask import Response
 from configs import dify_config
 from dify_app import DifyApp
 
-# cdg: 初始化应用指标
+
 def init_app(app: DifyApp):
-    # cdg: 添加版本号和环境变量到响应头
     @app.after_request
     def after_request(response):
-        """cdg: 添加版本号和环境变量到响应头"""
-        response.headers.add("X-Version", dify_config.CURRENT_VERSION)
+        """Add Version headers to the response."""
+        response.headers.add("X-Version", dify_config.project.version)
         response.headers.add("X-Env", dify_config.DEPLOY_ENV)
         return response
 
-    # cdg: 健康检查
     @app.route("/health")
     def health():
         return Response(
-            json.dumps({"pid": os.getpid(), "status": "ok", "version": dify_config.CURRENT_VERSION}),
+            json.dumps({"pid": os.getpid(), "status": "ok", "version": dify_config.project.version}),
             status=200,
             content_type="application/json",
         )
 
-    # cdg: 线程状态
     @app.route("/threads")
     def threads():
         num_threads = threading.active_count()
@@ -52,7 +49,6 @@ def init_app(app: DifyApp):
             "threads": thread_list,
         }
 
-    # cdg: 数据库连接池状态
     @app.route("/db-pool-stat")
     def pool_stat():
         from extensions.ext_database import db

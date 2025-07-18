@@ -1,23 +1,41 @@
 import io
+from urllib.parse import urlparse
 
-from flask import send_file
-from flask_login import current_user  # type: ignore
-from flask_restful import Resource, reqparse  # type: ignore
+from flask import redirect, send_file
+from flask_login import current_user
+from flask_restful import Resource, reqparse
 from sqlalchemy.orm import Session
 from werkzeug.exceptions import Forbidden
 
 from configs import dify_config
 from controllers.console import api
 from controllers.console.wraps import account_initialization_required, enterprise_license_required, setup_required
+from core.mcp.auth.auth_flow import auth, handle_callback
+from core.mcp.auth.auth_provider import OAuthClientProvider
+from core.mcp.error import MCPAuthError, MCPError
+from core.mcp.mcp_client import MCPClient
 from core.model_runtime.utils.encoders import jsonable_encoder
 from extensions.ext_database import db
 from libs.helper import alphanumeric, uuid_value
 from libs.login import login_required
 from services.tools.api_tools_manage_service import ApiToolManageService
 from services.tools.builtin_tools_manage_service import BuiltinToolManageService
+from services.tools.mcp_tools_mange_service import MCPToolManageService
 from services.tools.tool_labels_service import ToolLabelsService
 from services.tools.tools_manage_service import ToolCommonService
+from services.tools.tools_transform_service import ToolTransformService
 from services.tools.workflow_tools_manage_service import WorkflowToolManageService
+
+
+def is_valid_url(url: str) -> bool:
+    if not url:
+        return False
+
+    try:
+        parsed = urlparse(url)
+        return all([parsed.scheme, parsed.netloc]) and parsed.scheme in ["http", "https"]
+    except Exception:
+        return False
 
 
 class ToolProviderListApi(Resource):
@@ -25,14 +43,16 @@ class ToolProviderListApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         req = reqparse.RequestParser()
         req.add_argument(
             "type",
             type=str,
-            choices=["builtin", "model", "api", "workflow"],
+            choices=["builtin", "model", "api", "workflow", "mcp"],
             required=False,
             nullable=True,
             location="args",
@@ -47,16 +67,29 @@ class ToolBuiltinProviderListToolsApi(Resource):
     @login_required
     @account_initialization_required
     def get(self, provider):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        tenant_id = user.current_tenant_id
 
         return jsonable_encoder(
             BuiltinToolManageService.list_builtin_tool_provider_tools(
-                user_id,
                 tenant_id,
                 provider,
             )
         )
+
+
+class ToolBuiltinProviderInfoApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def get(self, provider):
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
+
+        return jsonable_encoder(BuiltinToolManageService.get_builtin_tool_provider_info(user_id, tenant_id, provider))
 
 
 class ToolBuiltinProviderDeleteApi(Resource):
@@ -64,11 +97,13 @@ class ToolBuiltinProviderDeleteApi(Resource):
     @login_required
     @account_initialization_required
     def post(self, provider):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         return BuiltinToolManageService.delete_builtin_tool_provider(
             user_id,
@@ -82,11 +117,13 @@ class ToolBuiltinProviderUpdateApi(Resource):
     @login_required
     @account_initialization_required
     def post(self, provider):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
         parser.add_argument("credentials", type=dict, required=True, nullable=False, location="json")
@@ -131,11 +168,13 @@ class ToolApiProviderAddApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
         parser.add_argument("credentials", type=dict, required=True, nullable=False, location="json")
@@ -168,6 +207,11 @@ class ToolApiProviderGetRemoteSchemaApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
+
         parser = reqparse.RequestParser()
 
         parser.add_argument("url", type=str, required=True, nullable=False, location="args")
@@ -175,8 +219,8 @@ class ToolApiProviderGetRemoteSchemaApi(Resource):
         args = parser.parse_args()
 
         return ApiToolManageService.get_api_tool_provider_remote_schema(
-            current_user.id,
-            current_user.current_tenant_id,
+            user_id,
+            tenant_id,
             args["url"],
         )
 
@@ -186,8 +230,10 @@ class ToolApiProviderListToolsApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
 
@@ -209,11 +255,13 @@ class ToolApiProviderUpdateApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
         parser.add_argument("credentials", type=dict, required=True, nullable=False, location="json")
@@ -248,11 +296,13 @@ class ToolApiProviderDeleteApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
 
@@ -272,8 +322,10 @@ class ToolApiProviderGetApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
 
@@ -293,7 +345,11 @@ class ToolBuiltinProviderCredentialsSchemaApi(Resource):
     @login_required
     @account_initialization_required
     def get(self, provider):
-        return BuiltinToolManageService.list_builtin_provider_credentials_schema(provider)
+        user = current_user
+
+        tenant_id = user.current_tenant_id
+
+        return BuiltinToolManageService.list_builtin_provider_credentials_schema(provider, tenant_id)
 
 
 class ToolApiProviderSchemaApi(Resource):
@@ -344,11 +400,13 @@ class ToolWorkflowProviderCreateApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         reqparser = reqparse.RequestParser()
         reqparser.add_argument("workflow_app_id", type=uuid_value, required=True, nullable=False, location="json")
@@ -381,11 +439,13 @@ class ToolWorkflowProviderUpdateApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         reqparser = reqparse.RequestParser()
         reqparser.add_argument("workflow_tool_id", type=uuid_value, required=True, nullable=False, location="json")
@@ -421,11 +481,13 @@ class ToolWorkflowProviderDeleteApi(Resource):
     @login_required
     @account_initialization_required
     def post(self):
-        if not current_user.is_admin_or_owner:
+        user = current_user
+
+        if not user.is_admin_or_owner:
             raise Forbidden()
 
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         reqparser = reqparse.RequestParser()
         reqparser.add_argument("workflow_tool_id", type=uuid_value, required=True, nullable=False, location="json")
@@ -444,8 +506,10 @@ class ToolWorkflowProviderGetApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
         parser.add_argument("workflow_tool_id", type=uuid_value, required=False, nullable=True, location="args")
@@ -476,8 +540,10 @@ class ToolWorkflowProviderListToolApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         parser = reqparse.RequestParser()
         parser.add_argument("workflow_tool_id", type=uuid_value, required=True, nullable=False, location="args")
@@ -498,8 +564,10 @@ class ToolBuiltinListApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         return jsonable_encoder(
             [
@@ -517,8 +585,10 @@ class ToolApiListApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         return jsonable_encoder(
             [
@@ -536,8 +606,10 @@ class ToolWorkflowListApi(Resource):
     @login_required
     @account_initialization_required
     def get(self):
-        user_id = current_user.id
-        tenant_id = current_user.current_tenant_id
+        user = current_user
+
+        user_id = user.id
+        tenant_id = user.current_tenant_id
 
         return jsonable_encoder(
             [
@@ -559,20 +631,182 @@ class ToolLabelsApi(Resource):
         return jsonable_encoder(ToolLabelsService.list_tool_labels())
 
 
+class ToolProviderMCPApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("server_url", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("name", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon_type", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon_background", type=str, required=False, nullable=True, location="json", default="")
+        parser.add_argument("server_identifier", type=str, required=True, nullable=False, location="json")
+        args = parser.parse_args()
+        user = current_user
+        if not is_valid_url(args["server_url"]):
+            raise ValueError("Server URL is not valid.")
+        return jsonable_encoder(
+            MCPToolManageService.create_mcp_provider(
+                tenant_id=user.current_tenant_id,
+                server_url=args["server_url"],
+                name=args["name"],
+                icon=args["icon"],
+                icon_type=args["icon_type"],
+                icon_background=args["icon_background"],
+                user_id=user.id,
+                server_identifier=args["server_identifier"],
+            )
+        )
+
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def put(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("server_url", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("name", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon_type", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("icon_background", type=str, required=False, nullable=True, location="json")
+        parser.add_argument("provider_id", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("server_identifier", type=str, required=True, nullable=False, location="json")
+        args = parser.parse_args()
+        if not is_valid_url(args["server_url"]):
+            if "[__HIDDEN__]" in args["server_url"]:
+                pass
+            else:
+                raise ValueError("Server URL is not valid.")
+        MCPToolManageService.update_mcp_provider(
+            tenant_id=current_user.current_tenant_id,
+            provider_id=args["provider_id"],
+            server_url=args["server_url"],
+            name=args["name"],
+            icon=args["icon"],
+            icon_type=args["icon_type"],
+            icon_background=args["icon_background"],
+            server_identifier=args["server_identifier"],
+        )
+        return {"result": "success"}
+
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def delete(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("provider_id", type=str, required=True, nullable=False, location="json")
+        args = parser.parse_args()
+        MCPToolManageService.delete_mcp_tool(tenant_id=current_user.current_tenant_id, provider_id=args["provider_id"])
+        return {"result": "success"}
+
+
+class ToolMCPAuthApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def post(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("provider_id", type=str, required=True, nullable=False, location="json")
+        parser.add_argument("authorization_code", type=str, required=False, nullable=True, location="json")
+        args = parser.parse_args()
+        provider_id = args["provider_id"]
+        tenant_id = current_user.current_tenant_id
+        provider = MCPToolManageService.get_mcp_provider_by_provider_id(provider_id, tenant_id)
+        if not provider:
+            raise ValueError("provider not found")
+        try:
+            with MCPClient(
+                provider.decrypted_server_url,
+                provider_id,
+                tenant_id,
+                authed=False,
+                authorization_code=args["authorization_code"],
+                for_list=True,
+            ):
+                MCPToolManageService.update_mcp_provider_credentials(
+                    mcp_provider=provider,
+                    credentials=provider.decrypted_credentials,
+                    authed=True,
+                )
+                return {"result": "success"}
+
+        except MCPAuthError:
+            auth_provider = OAuthClientProvider(provider_id, tenant_id, for_list=True)
+            return auth(auth_provider, provider.decrypted_server_url, args["authorization_code"])
+        except MCPError as e:
+            MCPToolManageService.update_mcp_provider_credentials(
+                mcp_provider=provider,
+                credentials={},
+                authed=False,
+            )
+            raise ValueError(f"Failed to connect to MCP server: {e}") from e
+
+
+class ToolMCPDetailApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def get(self, provider_id):
+        user = current_user
+        provider = MCPToolManageService.get_mcp_provider_by_provider_id(provider_id, user.current_tenant_id)
+        return jsonable_encoder(ToolTransformService.mcp_provider_to_user_provider(provider, for_list=True))
+
+
+class ToolMCPListAllApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def get(self):
+        user = current_user
+        tenant_id = user.current_tenant_id
+
+        tools = MCPToolManageService.retrieve_mcp_tools(tenant_id=tenant_id)
+
+        return [tool.to_dict() for tool in tools]
+
+
+class ToolMCPUpdateApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def get(self, provider_id):
+        tenant_id = current_user.current_tenant_id
+        tools = MCPToolManageService.list_mcp_tool_from_remote_server(
+            tenant_id=tenant_id,
+            provider_id=provider_id,
+        )
+        return jsonable_encoder(tools)
+
+
+class ToolMCPCallbackApi(Resource):
+    def get(self):
+        parser = reqparse.RequestParser()
+        parser.add_argument("code", type=str, required=True, nullable=False, location="args")
+        parser.add_argument("state", type=str, required=True, nullable=False, location="args")
+        args = parser.parse_args()
+        state_key = args["state"]
+        authorization_code = args["code"]
+        handle_callback(state_key, authorization_code)
+        return redirect(f"{dify_config.CONSOLE_WEB_URL}/oauth-callback")
+
+
 # tool provider
 api.add_resource(ToolProviderListApi, "/workspaces/current/tool-providers")
 
 # builtin tool provider
-api.add_resource(ToolBuiltinProviderListToolsApi, "/workspaces/current/tool-provider/builtin/<provider>/tools")
-api.add_resource(ToolBuiltinProviderDeleteApi, "/workspaces/current/tool-provider/builtin/<provider>/delete")
-api.add_resource(ToolBuiltinProviderUpdateApi, "/workspaces/current/tool-provider/builtin/<provider>/update")
+api.add_resource(ToolBuiltinProviderListToolsApi, "/workspaces/current/tool-provider/builtin/<path:provider>/tools")
+api.add_resource(ToolBuiltinProviderInfoApi, "/workspaces/current/tool-provider/builtin/<path:provider>/info")
+api.add_resource(ToolBuiltinProviderDeleteApi, "/workspaces/current/tool-provider/builtin/<path:provider>/delete")
+api.add_resource(ToolBuiltinProviderUpdateApi, "/workspaces/current/tool-provider/builtin/<path:provider>/update")
 api.add_resource(
-    ToolBuiltinProviderGetCredentialsApi, "/workspaces/current/tool-provider/builtin/<provider>/credentials"
+    ToolBuiltinProviderGetCredentialsApi, "/workspaces/current/tool-provider/builtin/<path:provider>/credentials"
 )
 api.add_resource(
-    ToolBuiltinProviderCredentialsSchemaApi, "/workspaces/current/tool-provider/builtin/<provider>/credentials_schema"
+    ToolBuiltinProviderCredentialsSchemaApi,
+    "/workspaces/current/tool-provider/builtin/<path:provider>/credentials_schema",
 )
-api.add_resource(ToolBuiltinProviderIconApi, "/workspaces/current/tool-provider/builtin/<provider>/icon")
+api.add_resource(ToolBuiltinProviderIconApi, "/workspaces/current/tool-provider/builtin/<path:provider>/icon")
 
 # api tool provider
 api.add_resource(ToolApiProviderAddApi, "/workspaces/current/tool-provider/api/add")
@@ -591,8 +825,15 @@ api.add_resource(ToolWorkflowProviderDeleteApi, "/workspaces/current/tool-provid
 api.add_resource(ToolWorkflowProviderGetApi, "/workspaces/current/tool-provider/workflow/get")
 api.add_resource(ToolWorkflowProviderListToolApi, "/workspaces/current/tool-provider/workflow/tools")
 
+# mcp tool provider
+api.add_resource(ToolMCPDetailApi, "/workspaces/current/tool-provider/mcp/tools/<path:provider_id>")
+api.add_resource(ToolProviderMCPApi, "/workspaces/current/tool-provider/mcp")
+api.add_resource(ToolMCPUpdateApi, "/workspaces/current/tool-provider/mcp/update/<path:provider_id>")
+api.add_resource(ToolMCPAuthApi, "/workspaces/current/tool-provider/mcp/auth")
+api.add_resource(ToolMCPCallbackApi, "/mcp/oauth/callback")
+
 api.add_resource(ToolBuiltinListApi, "/workspaces/current/tools/builtin")
 api.add_resource(ToolApiListApi, "/workspaces/current/tools/api")
+api.add_resource(ToolMCPListAllApi, "/workspaces/current/tools/mcp")
 api.add_resource(ToolWorkflowListApi, "/workspaces/current/tools/workflow")
-
 api.add_resource(ToolLabelsApi, "/workspaces/current/tool-labels")

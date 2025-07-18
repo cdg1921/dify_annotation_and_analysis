@@ -3,6 +3,7 @@ const translation = {
     header: {
       creation: 'Wissen erstellen',
       update: 'Daten hinzufügen',
+      fallbackRoute: 'Wissen',
     },
     one: 'Datenquelle wählen',
     two: 'Textvorverarbeitung und Bereinigung',
@@ -21,7 +22,7 @@ const translation = {
     },
     uploader: {
       title: 'Textdatei hochladen',
-      button: 'Datei hierher ziehen oder',
+      button: 'Dateien und Ordner hierher ziehen oder klicken',
       browse: 'Durchsuchen',
       tip: 'Unterstützt {{supportTypes}}. Maximal {{size}}MB pro Datei.',
       validation: {
@@ -68,7 +69,6 @@ const translation = {
       unknownError: 'Unbekannter Fehler',
       resetAll: 'Alles zurücksetzen',
       extractOnlyMainContent: 'Extrahieren Sie nur den Hauptinhalt (keine Kopf-, Navigations- und Fußzeilen usw.)',
-      firecrawlDocLink: 'https://docs.dify.ai/guides/knowledge-base/sync-from-website',
       firecrawlTitle: 'Extrahieren von Webinhalten mit 🔥Firecrawl',
       maxDepthTooltip: 'Maximale Tiefe für das Crawlen relativ zur eingegebenen URL. Tiefe 0 kratzt nur die Seite der eingegebenen URL, Tiefe 1 kratzt die URL und alles nach der eingegebenen URL + ein / und so weiter.',
       crawlSubPage: 'Unterseiten crawlen',
@@ -81,6 +81,13 @@ const translation = {
       jinaReaderNotConfiguredDescription: 'Richten Sie Jina Reader ein, indem Sie Ihren kostenlosen API-Schlüssel für den Zugriff eingeben.',
       useSitemapTooltip: 'Folgen Sie der Sitemap, um die Website zu crawlen. Ist dies nicht der Fall, crawlt Jina Reader iterativ basierend auf der Seitenrelevanz, sodass weniger, aber qualitativ hochwertigere Seiten angezeigt werden.',
       jinaReaderDoc: 'Erfahre mehr über Jina Reader',
+      configureJinaReader: 'Jina Reader konfigurieren',
+      waterCrawlNotConfigured: 'Watercrawl ist nicht konfiguriert',
+      configureWatercrawl: 'Wasserkrabbe konfigurieren',
+      watercrawlTitle: 'Webinhalt mit Watercrawl extrahieren',
+      watercrawlDoc: 'Wasserkriechen-Dokumente',
+      configureFirecrawl: 'Firecrawl konfigurieren',
+      waterCrawlNotConfiguredDescription: 'Konfigurieren Sie Watercrawl mit dem API-Schlüssel, um es zu verwenden.',
     },
     cancel: 'Abbrechen',
   },
@@ -198,6 +205,11 @@ const translation = {
     learnMore: 'Weitere Informationen',
     title: 'Verbinden Sie sich mit anderen Datenquellen?',
     description: 'Derzeit verfügt die Wissensdatenbank von Dify nur über begrenzte Datenquellen. Das Beitragen einer Datenquelle zur Dify-Wissensdatenbank ist eine fantastische Möglichkeit, die Flexibilität und Leistungsfähigkeit der Plattform für alle Benutzer zu verbessern. Unser Beitragsleitfaden erleichtert Ihnen den Einstieg. Bitte klicken Sie auf den untenstehenden Link, um mehr zu erfahren.',
+  },
+  watercrawl: {
+    configWatercrawl: 'Wasserkrabbe konfigurieren',
+    apiKeyPlaceholder: 'API-Schlüssel von watercrawl.dev',
+    getApiKeyLinkText: 'Holen Sie sich Ihren API-Schlüssel von watercrawl.dev',
   },
 }
 

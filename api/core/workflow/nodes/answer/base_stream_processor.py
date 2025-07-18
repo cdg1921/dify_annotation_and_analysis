@@ -9,7 +9,7 @@ from core.workflow.graph_engine.entities.graph import Graph
 
 logger = logging.getLogger(__name__)
 
-# cdg:AnswerStreamProcessor和EndStreamProcessor均继承于StreamProcessor
+
 class StreamProcessor(ABC):
     def __init__(self, graph: Graph, variable_pool: VariablePool) -> None:
         self.graph = graph
@@ -20,7 +20,6 @@ class StreamProcessor(ABC):
     def process(self, generator: Generator[GraphEngineEvent, None, None]) -> Generator[GraphEngineEvent, None, None]:
         raise NotImplementedError
 
-    # cdg:移除不可到达的节点
     def _remove_unreachable_nodes(self, event: NodeRunSucceededEvent | NodeRunExceptionEvent) -> None:
         finished_node_id = event.route_node_state.node_id
         if finished_node_id not in self.rest_node_ids:
@@ -61,13 +60,21 @@ class StreamProcessor(ABC):
                     ids = self._fetch_node_ids_in_reachable_branch(edge.target_node_id, run_result.edge_source_handle)
                     reachable_node_ids.extend(ids)
                 else:
+                    # if the condition edge in parallel, and the target node is not in parallel, we should not remove it
+                    # Issues: #13626
+                    if (
+                        finished_node_id in self.graph.node_parallel_mapping
+                        and edge.target_node_id not in self.graph.node_parallel_mapping
+                    ):
+                        continue
                     unreachable_first_node_ids.append(edge.target_node_id)
-
+            unreachable_first_node_ids = list(set(unreachable_first_node_ids) - set(reachable_node_ids))
             for node_id in unreachable_first_node_ids:
                 self._remove_node_ids_in_unreachable_branch(node_id, reachable_node_ids)
 
-    # cdg:获取分支中的节点
     def _fetch_node_ids_in_reachable_branch(self, node_id: str, branch_identify: Optional[str] = None) -> list[str]:
+        if node_id not in self.rest_node_ids:
+            self.rest_node_ids.append(node_id)
         node_ids = []
         for edge in self.graph.edge_mapping.get(node_id, []):
             if edge.target_node_id == self.graph.root_node_id:
@@ -82,7 +89,6 @@ class StreamProcessor(ABC):
             node_ids.extend(self._fetch_node_ids_in_reachable_branch(edge.target_node_id, branch_identify))
         return node_ids
 
-    # cdg:移除分支上不可达到的节点
     def _remove_node_ids_in_unreachable_branch(self, node_id: str, reachable_node_ids: list[str]) -> None:
         """
         remove target node ids until merge
@@ -90,7 +96,12 @@ class StreamProcessor(ABC):
         if node_id not in self.rest_node_ids:
             return
 
+        if node_id in reachable_node_ids:
+            return
+
         self.rest_node_ids.remove(node_id)
+        self.rest_node_ids.extend(set(reachable_node_ids) - set(self.rest_node_ids))
+
         for edge in self.graph.edge_mapping.get(node_id, []):
             if edge.target_node_id in reachable_node_ids:
                 continue

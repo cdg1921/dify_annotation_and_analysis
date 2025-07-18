@@ -31,16 +31,16 @@ export const useNodesExtraData = () => {
   }), [t, isChatMode])
 }
 
-export const useAvailableBlocks = (nodeType?: BlockEnum, isInIteration?: boolean) => {
+export const useAvailableBlocks = (nodeType?: BlockEnum, isInIteration?: boolean, isInLoop?: boolean) => {
   const nodesExtraData = useNodesExtraData()
   const availablePrevBlocks = useMemo(() => {
-    if (!nodeType)
+    if (!nodeType || !nodesExtraData[nodeType])
       return []
     return nodesExtraData[nodeType].availablePrevNodes || []
   }, [nodeType, nodesExtraData])
 
   const availableNextBlocks = useMemo(() => {
-    if (!nodeType)
+    if (!nodeType || !nodesExtraData[nodeType])
       return []
     return nodesExtraData[nodeType].availableNextNodes || []
   }, [nodeType, nodesExtraData])
@@ -48,15 +48,23 @@ export const useAvailableBlocks = (nodeType?: BlockEnum, isInIteration?: boolean
   return useMemo(() => {
     return {
       availablePrevBlocks: availablePrevBlocks.filter((nType) => {
-        if (isInIteration && (nType === BlockEnum.Iteration || nType === BlockEnum.End))
+        if (isInIteration && (nType === BlockEnum.Iteration || nType === BlockEnum.Loop || nType === BlockEnum.End))
           return false
-        return true
+
+        if (isInLoop && (nType === BlockEnum.Iteration || nType === BlockEnum.Loop || nType === BlockEnum.End))
+          return false
+
+        return !(!isInLoop && nType === BlockEnum.LoopEnd)
       }),
       availableNextBlocks: availableNextBlocks.filter((nType) => {
-        if (isInIteration && (nType === BlockEnum.Iteration || nType === BlockEnum.End))
+        if (isInIteration && (nType === BlockEnum.Iteration || nType === BlockEnum.Loop || nType === BlockEnum.End))
           return false
-        return true
+
+        if (isInLoop && (nType === BlockEnum.Iteration || nType === BlockEnum.Loop || nType === BlockEnum.End))
+          return false
+
+        return !(!isInLoop && nType === BlockEnum.LoopEnd)
       }),
     }
-  }, [isInIteration, availablePrevBlocks, availableNextBlocks])
+  }, [isInIteration, availablePrevBlocks, availableNextBlocks, isInLoop])
 }

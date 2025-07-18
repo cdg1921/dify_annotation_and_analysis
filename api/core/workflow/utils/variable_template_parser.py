@@ -10,7 +10,6 @@ SELECTOR_PATTERN = re.compile(r"\{\{(#[a-zA-Z0-9_]{1,50}(?:\.[a-zA-Z_][a-zA-Z0-9
 
 
 def extract_selectors_from_template(template: str, /) -> Sequence[VariableSelector]:
-    # cdg:从输出答案中抽取出结点变量
     parts = SELECTOR_PATTERN.split(template)
     selectors = []
     for part in filter(lambda x: x, parts):
@@ -96,7 +95,6 @@ class VariableTemplateParser:
 
         Args:
             inputs: A dictionary containing the values for the template variables.
-            remove_template_variables: A boolean indicating whether to remove the template variables from the output.
 
         Returns:
             The formatted string with template variables replaced by their values.

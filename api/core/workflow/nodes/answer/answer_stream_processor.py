@@ -2,7 +2,6 @@ import logging
 from collections.abc import Generator
 from typing import cast
 
-from core.file import FILE_MODEL_IDENTITY, File
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.graph_engine.entities.event import (
     GraphEngineEvent,
@@ -35,7 +34,7 @@ class AnswerStreamProcessor(StreamProcessor):
 
                 yield event
             elif isinstance(event, NodeRunStreamChunkEvent):
-                if event.in_iteration_id:
+                if event.in_iteration_id or event.in_loop_id:
                     yield event
                     continue
 
@@ -82,7 +81,7 @@ class AnswerStreamProcessor(StreamProcessor):
         :param event: node run succeeded event
         :return:
         """
-        for answer_node_id, position in self.route_position.items():
+        for answer_node_id in self.route_position:
             # all depends on answer node id not in rest node ids
             if event.route_node_state.node_id != answer_node_id and (
                 answer_node_id not in self.rest_node_ids
@@ -109,6 +108,7 @@ class AnswerStreamProcessor(StreamProcessor):
                         parallel_id=event.parallel_id,
                         parallel_start_node_id=event.parallel_start_node_id,
                         from_variable_selector=[answer_node_id, "answer"],
+                        node_version=event.node_version,
                     )
                 else:
                     route_chunk = cast(VarGenerateRouteChunk, route_chunk)
@@ -134,6 +134,7 @@ class AnswerStreamProcessor(StreamProcessor):
                             route_node_state=event.route_node_state,
                             parallel_id=event.parallel_id,
                             parallel_start_node_id=event.parallel_start_node_id,
+                            node_version=event.node_version,
                         )
 
                 self.route_position[answer_node_id] += 1
@@ -155,11 +156,32 @@ class AnswerStreamProcessor(StreamProcessor):
         for answer_node_id, route_position in self.route_position.items():
             if answer_node_id not in self.rest_node_ids:
                 continue
-
-            # all depends on answer node id not in rest node ids
-            if all(
-                dep_id not in self.rest_node_ids for dep_id in self.generate_routes.answer_dependencies[answer_node_id]
+            # Remove current node id from answer dependencies to support stream output if it is a success branch
+            answer_dependencies = self.generate_routes.answer_dependencies
+            edge_mapping = self.graph.edge_mapping.get(event.node_id)
+            success_edge = (
+                next(
+                    (
+                        edge
+                        for edge in edge_mapping
+                        if edge.run_condition
+                        and edge.run_condition.type == "branch_identify"
+                        and edge.run_condition.branch_identify == "success-branch"
+                    ),
+                    None,
+                )
+                if edge_mapping
+                else None
+            )
+            if (
+                event.node_id in answer_dependencies[answer_node_id]
+                and success_edge
+                and success_edge.target_node_id == answer_node_id
             ):
+                answer_dependencies[answer_node_id].remove(event.node_id)
+            answer_dependencies_ids = answer_dependencies.get(answer_node_id, [])
+            # all depends on answer node id not in rest node ids
+            if all(dep_id not in self.rest_node_ids for dep_id in answer_dependencies_ids):
                 if route_position >= len(self.generate_routes.answer_generate_route[answer_node_id]):
                     continue
 
@@ -178,44 +200,3 @@ class AnswerStreamProcessor(StreamProcessor):
                 stream_out_answer_node_ids.append(answer_node_id)
 
         return stream_out_answer_node_ids
-
-    @classmethod
-    def _fetch_files_from_variable_value(cls, value: dict | list) -> list[dict]:
-        """
-        Fetch files from variable value
-        :param value: variable value
-        :return:
-        """
-        if not value:
-            return []
-
-        files = []
-        if isinstance(value, list):
-            for item in value:
-                file_var = cls._get_file_var_from_value(item)
-                if file_var:
-                    files.append(file_var)
-        elif isinstance(value, dict):
-            file_var = cls._get_file_var_from_value(value)
-            if file_var:
-                files.append(file_var)
-
-        return files
-
-    @classmethod
-    def _get_file_var_from_value(cls, value: dict | list):
-        """
-        Get file var from value
-        :param value: variable value
-        :return:
-        """
-        if not value:
-            return None
-
-        if isinstance(value, dict):
-            if "dify_model_identity" in value and value["dify_model_identity"] == FILE_MODEL_IDENTITY:
-                return value
-        elif isinstance(value, File):
-            return value.to_dict()
-
-        return None

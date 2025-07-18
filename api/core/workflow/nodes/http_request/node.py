@@ -6,14 +6,15 @@ from typing import Any, Optional
 from configs import dify_config
 from core.file import File, FileTransferMethod
 from core.tools.tool_file_manager import ToolFileManager
+from core.variables.segments import ArrayFileSegment
 from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_entities import VariableSelector
+from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionStatus
 from core.workflow.nodes.base import BaseNode
 from core.workflow.nodes.enums import NodeType
 from core.workflow.nodes.http_request.executor import Executor
 from core.workflow.utils import variable_template_parser
 from factories import file_factory
-from models.workflow import WorkflowNodeExecutionStatus
 
 from .entities import (
     HttpRequestNodeData,
@@ -51,6 +52,7 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
                     "max_read_timeout": dify_config.HTTP_REQUEST_MAX_READ_TIMEOUT,
                     "max_write_timeout": dify_config.HTTP_REQUEST_MAX_WRITE_TIMEOUT,
                 },
+                "ssl_verify": dify_config.HTTP_REQUEST_NODE_SSL_VERIFY,
             },
             "retry_config": {
                 "max_retries": dify_config.SSRF_DEFAULT_MAX_RETRIES,
@@ -58,6 +60,10 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
                 "retry_enabled": True,
             },
         }
+
+    @classmethod
+    def version(cls) -> str:
+        return "1"
 
     def _run(self) -> NodeRunResult:
         process_data = {}
@@ -91,7 +97,7 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
                 status=WorkflowNodeExecutionStatus.SUCCEEDED,
                 outputs={
                     "status_code": response.status_code,
-                    "body": response.text if not files else "",
+                    "body": response.text if not files.value else "",
                     "headers": response.headers,
                     "files": files,
                 },
@@ -165,36 +171,49 @@ class HttpRequestNode(BaseNode[HttpRequestNodeData]):
 
         return mapping
 
-    def extract_files(self, url: str, response: Response) -> list[File]:
+    def extract_files(self, url: str, response: Response) -> ArrayFileSegment:
         """
         Extract files from response by checking both Content-Type header and URL
         """
-        files = []
+        files: list[File] = []
         is_file = response.is_file
         content_type = response.content_type
         content = response.content
+        parsed_content_disposition = response.parsed_content_disposition
+        content_disposition_type = None
 
-        if is_file:
-            # Guess file extension from URL or Content-Type header
-            filename = url.split("?")[0].split("/")[-1] or ""
-            mime_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        if not is_file:
+            return ArrayFileSegment(value=[])
 
-            tool_file = ToolFileManager.create_file_by_raw(
-                user_id=self.user_id,
-                tenant_id=self.tenant_id,
-                conversation_id=None,
-                file_binary=content,
-                mimetype=mime_type,
-            )
+        if parsed_content_disposition:
+            content_disposition_filename = parsed_content_disposition.get_filename()
+            if content_disposition_filename:
+                # If filename is available from content-disposition, use it to guess the content type
+                content_disposition_type = mimetypes.guess_type(content_disposition_filename)[0]
 
-            mapping = {
-                "tool_file_id": tool_file.id,
-                "transfer_method": FileTransferMethod.TOOL_FILE.value,
-            }
-            file = file_factory.build_from_mapping(
-                mapping=mapping,
-                tenant_id=self.tenant_id,
-            )
-            files.append(file)
+        # Guess file extension from URL or Content-Type header
+        filename = url.split("?")[0].split("/")[-1] or ""
+        mime_type = (
+            content_disposition_type or content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        )
+        tool_file_manager = ToolFileManager()
 
-        return files
+        tool_file = tool_file_manager.create_file_by_raw(
+            user_id=self.user_id,
+            tenant_id=self.tenant_id,
+            conversation_id=None,
+            file_binary=content,
+            mimetype=mime_type,
+        )
+
+        mapping = {
+            "tool_file_id": tool_file.id,
+            "transfer_method": FileTransferMethod.TOOL_FILE.value,
+        }
+        file = file_factory.build_from_mapping(
+            mapping=mapping,
+            tenant_id=self.tenant_id,
+        )
+        files.append(file)
+
+        return ArrayFileSegment(value=files)

@@ -5,7 +5,7 @@ import type { BodyPayload, HttpNodeType } from './types'
 import {
   ALL_CHAT_AVAILABLE_BLOCKS,
   ALL_COMPLETION_AVAILABLE_BLOCKS,
-} from '@/app/components/workflow/constants'
+} from '@/app/components/workflow/blocks'
 
 const nodeDefault: NodeDefault<HttpNodeType> = {
   defaultValue: {
@@ -22,6 +22,7 @@ const nodeDefault: NodeDefault<HttpNodeType> = {
       type: BodyType.none,
       data: [],
     },
+    ssl_verify: true,
     timeout: {
       max_connect_timeout: 0,
       max_read_timeout: 0,

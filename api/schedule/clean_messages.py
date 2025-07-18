@@ -1,4 +1,5 @@
 import datetime
+import logging
 import time
 
 import click
@@ -20,7 +21,9 @@ from models.model import (
 from models.web import SavedMessage
 from services.feature_service import FeatureService
 
-# cdg: 定义clean_messages任务，用于清理消息。
+_logger = logging.getLogger(__name__)
+
+
 @app.celery.task(queue="dataset")
 def clean_messages():
     click.echo(click.style("Start clean messages.", fg="green"))
@@ -31,9 +34,8 @@ def clean_messages():
     while True:
         try:
             # Main query with join and filter
-            # FIXME:for mypy no paginate method error
             messages = (
-                db.session.query(Message)  # type: ignore
+                db.session.query(Message)
                 .filter(Message.created_at < plan_sandbox_clean_message_day)
                 .order_by(Message.created_at.desc())
                 .limit(100)
@@ -46,7 +48,14 @@ def clean_messages():
             break
         for message in messages:
             plan_sandbox_clean_message_day = message.created_at
-            app = App.query.filter_by(id=message.app_id).first()
+            app = db.session.query(App).filter_by(id=message.app_id).first()
+            if not app:
+                _logger.warning(
+                    "Expected App record to exist, but none was found, app_id=%s, message_id=%s",
+                    message.app_id,
+                    message.id,
+                )
+                continue
             features_cache_key = f"features:{app.tenant_id}"
             plan_cache = redis_client.get(features_cache_key)
             if plan_cache is None:

@@ -5,18 +5,21 @@ import click
 import app
 from configs import dify_config
 from core.rag.datasource.vdb.tidb_on_qdrant.tidb_service import TidbService
+from extensions.ext_database import db
 from models.dataset import TidbAuthBinding
 
-# cdg: 定义update_tidb_serverless_status_task任务，用于更新TiDB Serverless集群状态。
+
 @app.celery.task(queue="dataset")
 def update_tidb_serverless_status_task():
     click.echo(click.style("Update tidb serverless status task.", fg="green"))
     start_at = time.perf_counter()
     try:
         # check the number of idle tidb serverless
-        tidb_serverless_list = TidbAuthBinding.query.filter(
-            TidbAuthBinding.active == False, TidbAuthBinding.status == "CREATING"
-        ).all()
+        tidb_serverless_list = (
+            db.session.query(TidbAuthBinding)
+            .filter(TidbAuthBinding.active == False, TidbAuthBinding.status == "CREATING")
+            .all()
+        )
         if len(tidb_serverless_list) == 0:
             return
         # update tidb serverless status

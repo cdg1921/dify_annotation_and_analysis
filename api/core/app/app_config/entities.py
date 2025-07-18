@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 from enum import Enum, StrEnum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 from core.file import FileTransferMethod, FileType, FileUploadConfig
+from core.model_runtime.entities.llm_entities import LLMMode
 from core.model_runtime.entities.message_entities import PromptMessageRole
 from models.model import AppMode
 
@@ -14,11 +15,11 @@ class ModelConfigEntity(BaseModel):
     Model Config Entity.
     """
 
-    provider: str                     # cdg:供应商
-    model: str                        # cdg:模型名称
-    mode: Optional[str] = None        # cdg:模型模式：chat或completion
-    parameters: dict[str, Any] = {}   # cdg:模型参数，如max_tokens、top K、Top P、温度等
-    stop: list[str] = []              # cdg:停止标识
+    provider: str
+    model: str
+    mode: Optional[str] = None
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    stop: list[str] = Field(default_factory=list)
 
 
 class AdvancedChatMessageEntity(BaseModel):
@@ -26,8 +27,8 @@ class AdvancedChatMessageEntity(BaseModel):
     Advanced Chat Message Entity.
     """
 
-    text: str                  # cdg:消息内容
-    role: PromptMessageRole    # cdg:角色，如system、user、assistant、tool等
+    text: str
+    role: PromptMessageRole
 
 
 class AdvancedChatPromptTemplateEntity(BaseModel):
@@ -35,7 +36,7 @@ class AdvancedChatPromptTemplateEntity(BaseModel):
     Advanced Chat Prompt Template Entity.
     """
 
-    messages: list[AdvancedChatMessageEntity]   # cdg:由多个AdvancedChatMessageEntity构成的消息列表
+    messages: list[AdvancedChatMessageEntity]
 
 
 class AdvancedCompletionPromptTemplateEntity(BaseModel):
@@ -47,7 +48,7 @@ class AdvancedCompletionPromptTemplateEntity(BaseModel):
         """
         Role Prefix Entity.
         """
-        # cdg:Completion模式下的角色只有user和assistant
+
         user: str
         assistant: str
 
@@ -83,8 +84,7 @@ class PromptTemplateEntity(BaseModel):
             raise ValueError(f"invalid prompt type value {value}")
 
     prompt_type: PromptType
-    # cdg:simple_prompt_template、advanced_chat_prompt_template、advanced_completion_prompt_template三选一
-    simple_prompt_template: Optional[str] = None   # cdg:Optional,可选，可有可无
+    simple_prompt_template: Optional[str] = None
     advanced_chat_prompt_template: Optional[AdvancedChatPromptTemplateEntity] = None
     advanced_completion_prompt_template: Optional[AdvancedCompletionPromptTemplateEntity] = None
 
@@ -104,11 +104,13 @@ class VariableEntity(BaseModel):
     Variable Entity.
     """
 
+    # `variable` records the name of the variable in user inputs.
     variable: str
     label: str
     description: str = ""
     type: VariableEntityType
     required: bool = False
+    hide: bool = False
     max_length: Optional[int] = None
     options: Sequence[str] = Field(default_factory=list)
     allowed_file_types: Sequence[FileType] = Field(default_factory=list)
@@ -133,7 +135,56 @@ class ExternalDataVariableEntity(BaseModel):
 
     variable: str
     type: str
-    config: dict[str, Any] = {}
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+SupportedComparisonOperator = Literal[
+    # for string or array
+    "contains",
+    "not contains",
+    "start with",
+    "end with",
+    "is",
+    "is not",
+    "empty",
+    "not empty",
+    # for number
+    "=",
+    "≠",
+    ">",
+    "<",
+    "≥",
+    "≤",
+    # for time
+    "before",
+    "after",
+]
+
+
+class ModelConfig(BaseModel):
+    provider: str
+    name: str
+    mode: LLMMode
+    completion_params: dict[str, Any] = {}
+
+
+class Condition(BaseModel):
+    """
+    Conditon detail
+    """
+
+    name: str
+    comparison_operator: SupportedComparisonOperator
+    value: str | Sequence[str] | None | int | float = None
+
+
+class MetadataFilteringCondition(BaseModel):
+    """
+    Metadata Filtering Condition.
+    """
+
+    logical_operator: Optional[Literal["and", "or"]] = "and"
+    conditions: Optional[list[Condition]] = Field(default=None, deprecated=True)
 
 
 class DatasetRetrieveConfigEntity(BaseModel):
@@ -147,8 +198,8 @@ class DatasetRetrieveConfigEntity(BaseModel):
         'single' or 'multiple'
         """
 
-        SINGLE = "single"       # cdg:仅召回单个知识库的内容
-        MULTIPLE = "multiple"   # cdg:同时召回多个知识库的内容
+        SINGLE = "single"
+        MULTIPLE = "multiple"
 
         @classmethod
         def value_of(cls, value: str):
@@ -172,6 +223,9 @@ class DatasetRetrieveConfigEntity(BaseModel):
     reranking_model: Optional[dict] = None
     weights: Optional[dict] = None
     reranking_enabled: Optional[bool] = True
+    metadata_filtering_mode: Optional[Literal["disabled", "automatic", "manual"]] = "disabled"
+    metadata_model_config: Optional[ModelConfig] = None
+    metadata_filtering_conditions: Optional[MetadataFilteringCondition] = None
 
 
 class DatasetEntity(BaseModel):
@@ -187,9 +241,9 @@ class SensitiveWordAvoidanceEntity(BaseModel):
     """
     Sensitive Word Avoidance Entity.
     """
-    # cdg:敏感词字典
+
     type: str
-    config: dict[str, Any] = {}
+    config: dict[str, Any] = Field(default_factory=dict)
 
 
 class TextToSpeechEntity(BaseModel):
@@ -210,17 +264,17 @@ class TracingConfigEntity(BaseModel):
     enabled: bool
     tracing_provider: str
 
-# cdg:工作流中“添加功能”模块支持的功能特性
+
 class AppAdditionalFeatures(BaseModel):
-    file_upload: Optional[FileUploadConfig] = None           # cdg:文件上传特性
-    opening_statement: Optional[str] = None                  # cdg:开场白
-    suggested_questions: list[str] = []                      # cdg:建议问题
-    suggested_questions_after_answer: bool = False           # cdg:是否显示建议问题
-    show_retrieve_source: bool = False                       # cdg:是否显示知识库来源
-    more_like_this: bool = False                             # cdg:是否显示相关问题
-    speech_to_text: bool = False                             # cdg:是否启用语音转文字
-    text_to_speech: Optional[TextToSpeechEntity] = None      # cdg:是否启用文字转语音
-    trace_config: Optional[TracingConfigEntity] = None       # cdg:是否启用链路追踪
+    file_upload: Optional[FileUploadConfig] = None
+    opening_statement: Optional[str] = None
+    suggested_questions: list[str] = []
+    suggested_questions_after_answer: bool = False
+    show_retrieve_source: bool = False
+    more_like_this: bool = False
+    speech_to_text: bool = False
+    text_to_speech: Optional[TextToSpeechEntity] = None
+    trace_config: Optional[TracingConfigEntity] = None
 
 
 class AppConfig(BaseModel):
@@ -230,7 +284,6 @@ class AppConfig(BaseModel):
 
     tenant_id: str
     app_id: str
-    # cdg:AppMode支持completion、workflow、chat、advanced-chat、agent-chat、channel
     app_mode: AppMode
     additional_features: AppAdditionalFeatures
     variables: list[VariableEntity] = []

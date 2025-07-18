@@ -1,17 +1,22 @@
 import logging
+from pathlib import Path
 from typing import Any
 
 from pydantic.fields import FieldInfo
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict, TomlConfigSettingsSource
+
+from libs.file_utils import search_file_upwards
 
 from .deploy import DeploymentConfig
 from .enterprise import EnterpriseFeatureConfig
 from .extra import ExtraServiceConfig
 from .feature import FeatureConfig
 from .middleware import MiddlewareConfig
+from .observability import ObservabilityConfig
 from .packaging import PackagingInfo
 from .remote_settings_sources import RemoteSettingsSource, RemoteSettingsSourceConfig, RemoteSettingsSourceName
 from .remote_settings_sources.apollo import ApolloSettingsSource
+from .remote_settings_sources.nacos import NacosSettingsSource
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,8 @@ class RemoteSettingsSourceFactory(PydanticBaseSettingsSource):
         match remote_source_name:
             case RemoteSettingsSourceName.APOLLO:
                 remote_source = ApolloSettingsSource(current_state)
+            case RemoteSettingsSourceName.NACOS:
+                remote_source = NacosSettingsSource(current_state)
             case _:
                 logger.warning(f"Unsupported remote source: {remote_source_name}")
                 return {}
@@ -47,28 +54,26 @@ class RemoteSettingsSourceFactory(PydanticBaseSettingsSource):
 
         return d
 
-# cdg:定义一个配置 DifyConfig，用于集中管理DIFY的各种配置
+
 class DifyConfig(
     # Packaging info
-    PackagingInfo, # cdg: 打包配置信息
+    PackagingInfo,
     # Deployment configs
-    DeploymentConfig, # cdg: 部署配置信息
+    DeploymentConfig,
     # Feature configs
-    FeatureConfig, # cdg: 功能配置信息
+    FeatureConfig,
     # Middleware configs
-    MiddlewareConfig, # cdg: 中间件配置信息
+    MiddlewareConfig,
     # Extra service configs
-    ExtraServiceConfig, # cdg: 额外服务配置信息
+    ExtraServiceConfig,
+    # Observability configs
+    ObservabilityConfig,
     # Remote source configs
-    RemoteSettingsSourceConfig, # cdg: 远程设置源配置信息
+    RemoteSettingsSourceConfig,
     # Enterprise feature configs
     # **Before using, please contact business@dify.ai by email to inquire about licensing matters.**
-    EnterpriseFeatureConfig, # cdg: 企业级功能配置信息
-): 
-    # cdg:注意，DIFY对现有配置进行了分类，后续有新的配置，请添加到对应的配置类中，便于后续的维护和扩展。
-
-
-    # cdg:定义类属性model_config，其值为SettingsConfigDict的实例。这个配置字典用于指定如何读取配置文件（如 .env 文件），并设置一些属性：
+    EnterpriseFeatureConfig,
+):
     model_config = SettingsConfigDict(
         # read from dotenv format config file
         env_file=".env",
@@ -97,4 +102,12 @@ class DifyConfig(
             RemoteSettingsSourceFactory(settings_cls),
             dotenv_settings,
             file_secret_settings,
+            TomlConfigSettingsSource(
+                settings_cls=settings_cls,
+                toml_file=search_file_upwards(
+                    base_dir_path=Path(__file__).parent,
+                    target_file_name="pyproject.toml",
+                    max_search_parent_depth=2,
+                ),
+            ),
         )

@@ -4,8 +4,6 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 from typing import Optional, Union, cast
 
-from sqlalchemy import and_
-
 from core.app.app_config.entities import EasyUIBasedAppConfig, EasyUIBasedAppModelConfigFrom
 from core.app.apps.base_app_generator import BaseAppGenerator
 from core.app.apps.base_app_queue_manager import AppQueueManager, GenerateTaskStoppedError
@@ -27,22 +25,21 @@ from core.app.task_pipeline.easy_ui_based_generate_task_pipeline import EasyUIBa
 from core.prompt.utils.prompt_template_parser import PromptTemplateParser
 from extensions.ext_database import db
 from models import Account
-from models.enums import CreatedByRole
+from models.enums import CreatorUserRole
 from models.model import App, AppMode, AppModelConfig, Conversation, EndUser, Message, MessageFile
 from services.errors.app_model_config import AppModelConfigBrokenError
-from services.errors.conversation import ConversationCompletedError, ConversationNotExistsError
+from services.errors.conversation import ConversationNotExistsError
+from services.errors.message import MessageNotExistsError
 
 logger = logging.getLogger(__name__)
 
-# cdg:MessageBasedAppGenerator -> BaseAppGenerator
+
 class MessageBasedAppGenerator(BaseAppGenerator):
-    # cdg:BaseAppGenerator负责处理输入，MessageBasedAppGenerator处理输出，继承BaseAppGenerator，具备处理输入输出的能力
     def _handle_response(
         self,
         application_generate_entity: Union[
             ChatAppGenerateEntity,
             CompletionAppGenerateEntity,
-            AgentChatAppGenerateEntity,
             AgentChatAppGenerateEntity,
         ],
         queue_manager: AppQueueManager,
@@ -66,7 +63,6 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         :return:
         """
         # init generate task pipeline
-        # cdg:初始化任务pipeline
         generate_task_pipeline = EasyUIBasedGenerateTaskPipeline(
             application_generate_entity=application_generate_entity,
             queue_manager=queue_manager,
@@ -83,30 +79,6 @@ class MessageBasedAppGenerator(BaseAppGenerator):
             else:
                 logger.exception(f"Failed to handle response, conversation_id: {conversation.id}")
                 raise e
-
-    def _get_conversation_by_user(
-        self, app_model: App, conversation_id: str, user: Union[Account, EndUser]
-    ) -> Conversation:
-        conversation_filter = [
-            Conversation.id == conversation_id,
-            Conversation.app_id == app_model.id,
-            Conversation.status == "normal",
-        ]
-
-        if isinstance(user, Account):
-            conversation_filter.append(Conversation.from_account_id == user.id)
-        else:
-            conversation_filter.append(Conversation.from_end_user_id == user.id if user else None)
-
-        conversation = db.session.query(Conversation).filter(and_(*conversation_filter)).first()
-
-        if not conversation:
-            raise ConversationNotExistsError()
-
-        if conversation.status != "normal":
-            raise ConversationCompletedError()
-
-        return conversation
 
     def _get_app_model_config(self, app_model: App, conversation: Optional[Conversation] = None) -> AppModelConfig:
         if conversation:
@@ -177,6 +149,16 @@ class MessageBasedAppGenerator(BaseAppGenerator):
         # get conversation introduction
         introduction = self._get_conversation_introduction(application_generate_entity)
 
+        # get conversation name
+        if isinstance(application_generate_entity, AdvancedChatAppGenerateEntity):
+            query = application_generate_entity.query or "New conversation"
+        else:
+            query = next(iter(application_generate_entity.inputs.values()), "New conversation")
+            if isinstance(query, int):
+                query = str(query)
+        query = query or "New conversation"
+        conversation_name = (query[:20] + "…") if len(query) > 20 else query
+
         if not conversation:
             conversation = Conversation(
                 app_id=app_config.app_id,
@@ -185,7 +167,7 @@ class MessageBasedAppGenerator(BaseAppGenerator):
                 model_id=model_id,
                 override_model_configs=json.dumps(override_model_configs) if override_model_configs else None,
                 mode=app_config.app_mode.value,
-                name="New conversation",
+                name=conversation_name,
                 inputs=application_generate_entity.inputs,
                 introduction=introduction,
                 system_instruction="",
@@ -242,7 +224,7 @@ class MessageBasedAppGenerator(BaseAppGenerator):
                 belongs_to="user",
                 url=file.remote_url,
                 upload_file_id=file.related_id,
-                created_by_role=(CreatedByRole.ACCOUNT if account_id else CreatedByRole.END_USER),
+                created_by_role=(CreatorUserRole.ACCOUNT if account_id else CreatorUserRole.END_USER),
                 created_by=account_id or end_user_id or "",
             )
             db.session.add(message_file)
@@ -270,27 +252,28 @@ class MessageBasedAppGenerator(BaseAppGenerator):
 
         return introduction or ""
 
-    def _get_conversation(self, conversation_id: str):
+    def _get_conversation(self, conversation_id: str) -> Conversation:
         """
         Get conversation by conversation id
         :param conversation_id: conversation id
         :return: conversation
         """
-        # cdg:根据会话ID获取会话
         conversation = db.session.query(Conversation).filter(Conversation.id == conversation_id).first()
 
         if not conversation:
-            raise ConversationNotExistsError()
+            raise ConversationNotExistsError("Conversation not exists")
 
         return conversation
 
-    def _get_message(self, message_id: str) -> Optional[Message]:
+    def _get_message(self, message_id: str) -> Message:
         """
         Get message by message id
         :param message_id: message id
         :return: message
         """
-        # cdg:根据消息ID获取消息，一次会话中包含多个消息
         message = db.session.query(Message).filter(Message.id == message_id).first()
+
+        if message is None:
+            raise MessageNotExistsError("Message not exists")
 
         return message

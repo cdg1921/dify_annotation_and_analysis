@@ -5,24 +5,25 @@ from typing import Any, cast
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from constants import AUDIO_EXTENSIONS, DOCUMENT_EXTENSIONS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
-from core.file import File, FileBelongsTo, FileTransferMethod, FileType, FileUploadConfig
+from core.file import File, FileBelongsTo, FileTransferMethod, FileType, FileUploadConfig, helpers
 from core.helper import ssrf_proxy
 from extensions.ext_database import db
 from models import MessageFile, ToolFile, UploadFile
 
-# cdg: 从消息文件中构建文件
+
 def build_from_message_files(
     *,
     message_files: Sequence["MessageFile"],
     tenant_id: str,
-    config: FileUploadConfig, # cdg: 文件上传配置，包括文件保存类型、文件大小限制、文件类型限制等
+    config: FileUploadConfig,
 ) -> Sequence[File]:
     results = [
         build_from_message_file(message_file=file, tenant_id=tenant_id, config=config)
         for file in message_files
-        if file.belongs_to != FileBelongsTo.ASSISTANT # cdg: 不从助手消息中构建文件，实际来源是用户上传的文件
+        if file.belongs_to != FileBelongsTo.ASSISTANT
     ]
     return results
 
@@ -34,11 +35,11 @@ def build_from_message_file(
     config: FileUploadConfig,
 ):
     mapping = {
-        "transfer_method": message_file.transfer_method, # cdg: 文件传输方式
-        "url": message_file.url, # cdg: 文件URL 
-        "id": message_file.id, # cdg: 文件ID
-        "type": message_file.type, # cdg: 文件类型
-        "upload_file_id": message_file.upload_file_id, # cdg: 文件上传ID
+        "transfer_method": message_file.transfer_method,
+        "url": message_file.url,
+        "id": message_file.id,
+        "type": message_file.type,
+        "upload_file_id": message_file.upload_file_id,
     }
     return build_from_mapping(
         mapping=mapping,
@@ -52,25 +53,27 @@ def build_from_mapping(
     mapping: Mapping[str, Any],
     tenant_id: str,
     config: FileUploadConfig | None = None,
+    strict_type_validation: bool = False,
 ) -> File:
     transfer_method = FileTransferMethod.value_of(mapping.get("transfer_method"))
-    # cdg: 构建文件的函数,根据文件传输方式选择不同的构建函数，包括本地文件、远程URL、工具文件。这样设计的好处是，当需要添加新的文件传输方式时，只需要添加新的构建函数，而不需要修改现有的代码。
+
     build_functions: dict[FileTransferMethod, Callable] = {
         FileTransferMethod.LOCAL_FILE: _build_from_local_file,
         FileTransferMethod.REMOTE_URL: _build_from_remote_url,
         FileTransferMethod.TOOL_FILE: _build_from_tool_file,
     }
-    # cdg: 获取构建文件的函数
+
     build_func = build_functions.get(transfer_method)
     if not build_func:
         raise ValueError(f"Invalid file transfer method: {transfer_method}")
-    # cdg: 构建文件
+
     file: File = build_func(
         mapping=mapping,
         tenant_id=tenant_id,
         transfer_method=transfer_method,
+        strict_type_validation=strict_type_validation,
     )
-    # cdg: 验证文件
+
     if config and not _is_file_valid_with_config(
         input_file_type=mapping.get("type", FileType.CUSTOM),
         file_extension=file.extension or "",
@@ -78,26 +81,29 @@ def build_from_mapping(
         config=config,
     ):
         raise ValueError(f"File validation failed for file: {file.filename}")
-    # cdg: 返回文件
+
     return file
 
-# cdg: 从多个映射中构建文件
+
 def build_from_mappings(
     *,
     mappings: Sequence[Mapping[str, Any]],
     config: FileUploadConfig | None = None,
     tenant_id: str,
+    strict_type_validation: bool = False,
 ) -> Sequence[File]:
-    # cdg: 以映射列表为输入，构建多个文件，返回文件列表
+    # TODO(QuantumGhost): Performance concern - each mapping triggers a separate database query.
+    # Implement batch processing to reduce database load when handling multiple files.
     files = [
         build_from_mapping(
             mapping=mapping,
             tenant_id=tenant_id,
             config=config,
+            strict_type_validation=strict_type_validation,
         )
         for mapping in mappings
     ]
-    # cdg: 验证文件，如果文件类型为图片，则验证图片数量是否超过最大限制
+
     if (
         config
         # If image config is set.
@@ -111,35 +117,41 @@ def build_from_mappings(
 
     return files
 
-# cdg: 从本地文件构建文件
+
 def _build_from_local_file(
     *,
     mapping: Mapping[str, Any],
     tenant_id: str,
     transfer_method: FileTransferMethod,
+    strict_type_validation: bool = False,
 ) -> File:
-    upload_file_id = mapping.get("upload_file_id") # cdg: 获取文件上传ID
-    if not upload_file_id: # cdg: 如果文件上传ID为空，则抛出异常
+    upload_file_id = mapping.get("upload_file_id")
+    if not upload_file_id:
         raise ValueError("Invalid upload file id")
-    # cdg: 检查文件上传ID是否为有效的UUID，如果无效，则抛出异常
+    # check if upload_file_id is a valid uuid
     try:
         uuid.UUID(upload_file_id)
     except ValueError:
-        raise ValueError("Invalid upload file id format")  
-    # cdg: 查询文件上传文件，如果文件不存在，则抛出异常
+        raise ValueError("Invalid upload file id format")
     stmt = select(UploadFile).where(
         UploadFile.id == upload_file_id,
         UploadFile.tenant_id == tenant_id,
     )
-    # cdg: 查询文件上传文件，如果文件不存在，则抛出异常
+
     row = db.session.scalar(stmt)
-    if row is None: # cdg: 如果文件不存在，则抛出异常
+    if row is None:
         raise ValueError("Invalid upload file")
-    # cdg: 获取文件类型
-    file_type = FileType(mapping.get("type", "custom"))
-    # cdg: 标准化文件类型
-    file_type = _standardize_file_type(file_type, extension="." + row.extension, mime_type=row.mime_type)
-    # cdg: 构建文件对象
+
+    detected_file_type = _standardize_file_type(extension="." + row.extension, mime_type=row.mime_type)
+    specified_type = mapping.get("type", "custom")
+
+    if strict_type_validation and detected_file_type.value != specified_type:
+        raise ValueError("Detected file type does not match the specified type. Please verify the file.")
+
+    file_type = (
+        FileType(specified_type) if specified_type and specified_type != FileType.CUSTOM.value else detected_file_type
+    )
+
     return File(
         id=mapping.get("id"),
         filename=row.name,
@@ -154,22 +166,67 @@ def _build_from_local_file(
         storage_key=row.key,
     )
 
-# cdg: 从远程URL构建文件
+
 def _build_from_remote_url(
     *,
     mapping: Mapping[str, Any],
     tenant_id: str,
     transfer_method: FileTransferMethod,
+    strict_type_validation: bool = False,
 ) -> File:
+    upload_file_id = mapping.get("upload_file_id")
+    if upload_file_id:
+        try:
+            uuid.UUID(upload_file_id)
+        except ValueError:
+            raise ValueError("Invalid upload file id format")
+        stmt = select(UploadFile).where(
+            UploadFile.id == upload_file_id,
+            UploadFile.tenant_id == tenant_id,
+        )
+
+        upload_file = db.session.scalar(stmt)
+        if upload_file is None:
+            raise ValueError("Invalid upload file")
+
+        detected_file_type = _standardize_file_type(
+            extension="." + upload_file.extension, mime_type=upload_file.mime_type
+        )
+
+        specified_type = mapping.get("type")
+
+        if strict_type_validation and specified_type and detected_file_type.value != specified_type:
+            raise ValueError("Detected file type does not match the specified type. Please verify the file.")
+
+        file_type = (
+            FileType(specified_type)
+            if specified_type and specified_type != FileType.CUSTOM.value
+            else detected_file_type
+        )
+
+        return File(
+            id=mapping.get("id"),
+            filename=upload_file.name,
+            extension="." + upload_file.extension,
+            mime_type=upload_file.mime_type,
+            tenant_id=tenant_id,
+            type=file_type,
+            transfer_method=transfer_method,
+            remote_url=helpers.get_signed_file_url(upload_file_id=str(upload_file_id)),
+            related_id=mapping.get("upload_file_id"),
+            size=upload_file.size,
+            storage_key=upload_file.key,
+        )
     url = mapping.get("url") or mapping.get("remote_url")
     if not url:
         raise ValueError("Invalid file url")
 
     mime_type, filename, file_size = _get_remote_file_info(url)
-    extension = mimetypes.guess_extension(mime_type) or "." + filename.split(".")[-1] if "." in filename else ".bin"
+    extension = mimetypes.guess_extension(mime_type) or ("." + filename.split(".")[-1] if "." in filename else ".bin")
 
-    file_type = FileType(mapping.get("type", "custom"))
-    file_type = _standardize_file_type(file_type, extension=extension, mime_type=mime_type)
+    file_type = _standardize_file_type(extension=extension, mime_type=mime_type)
+    if file_type.value != mapping.get("type", "custom"):
+        raise ValueError("Detected file type does not match the specified type. Please verify the file.")
 
     return File(
         id=mapping.get("id"),
@@ -184,7 +241,7 @@ def _build_from_remote_url(
         storage_key="",
     )
 
-# cdg: 获取远程文件信息
+
 def _get_remote_file_info(url: str):
     file_size = -1
     filename = url.split("/")[-1].split("?")[0] or "unknown_file"
@@ -200,14 +257,14 @@ def _get_remote_file_info(url: str):
 
     return mime_type, filename, file_size
 
-# cdg: 从工具文件构建文件
+
 def _build_from_tool_file(
     *,
     mapping: Mapping[str, Any],
     tenant_id: str,
     transfer_method: FileTransferMethod,
+    strict_type_validation: bool = False,
 ) -> File:
-    # cdg: 查询工具文件，如果文件不存在，则抛出异常
     tool_file = (
         db.session.query(ToolFile)
         .filter(
@@ -220,13 +277,19 @@ def _build_from_tool_file(
     if tool_file is None:
         raise ValueError(f"ToolFile {mapping.get('tool_file_id')} not found")
 
-    # cdg: 获取文件扩展名
     extension = "." + tool_file.file_key.split(".")[-1] if "." in tool_file.file_key else ".bin"
-    # cdg: 获取文件类型
-    file_type = FileType(mapping.get("type", "custom"))
-    # cdg: 标准化文件类型
-    file_type = _standardize_file_type(file_type, extension=extension, mime_type=tool_file.mimetype)
-    # cdg: 构建文件对象
+
+    detected_file_type = _standardize_file_type(extension="." + extension, mime_type=tool_file.mimetype)
+
+    specified_type = mapping.get("type")
+
+    if strict_type_validation and specified_type and detected_file_type.value != specified_type:
+        raise ValueError("Detected file type does not match the specified type. Please verify the file.")
+
+    file_type = (
+        FileType(specified_type) if specified_type and specified_type != FileType.CUSTOM.value else detected_file_type
+    )
+
     return File(
         id=mapping.get("id"),
         tenant_id=tenant_id,
@@ -241,7 +304,7 @@ def _build_from_tool_file(
         storage_key=tool_file.file_key,
     )
 
-# cdg: 验证文件是否符合配置
+
 def _is_file_valid_with_config(
     *,
     input_file_type: str,
@@ -255,28 +318,31 @@ def _is_file_valid_with_config(
         and input_file_type != FileType.CUSTOM
     ):
         return False
-    # cdg: 验证文件类型是否符合配置，具体来说，如果文件类型为自定义，则验证文件扩展名是否符合配置
+
     if (
         input_file_type == FileType.CUSTOM
         and config.allowed_file_extensions is not None
         and file_extension not in config.allowed_file_extensions
     ):
         return False
-    # cdg: 验证文件类型是否符合配置，具体来说，如果文件类型为图片，则验证文件传输方式是否符合配置
-    if input_file_type == FileType.IMAGE and config.image_config:
-        if config.image_config.transfer_methods and file_transfer_method not in config.image_config.transfer_methods:
+
+    if input_file_type == FileType.IMAGE:
+        if (
+            config.image_config
+            and config.image_config.transfer_methods
+            and file_transfer_method not in config.image_config.transfer_methods
+        ):
             return False
+    elif config.allowed_file_upload_methods and file_transfer_method not in config.allowed_file_upload_methods:
+        return False
 
     return True
 
-# cdg: 标准化文件类型
-def _standardize_file_type(file_type: FileType, /, *, extension: str = "", mime_type: str = "") -> FileType:
+
+def _standardize_file_type(*, extension: str = "", mime_type: str = "") -> FileType:
     """
-    If custom type, try to guess the file type by extension and mime_type.
+    Infer the possible actual type of the file based on the extension and mime_type
     """
-    # cdg: 如果文件类型为自定义，则根据文件扩展名和MIME类型猜测文件类型，如果猜测失败，则返回自定义类型# 
-    if file_type != FileType.CUSTOM:
-        return FileType(file_type)
     guessed_type = None
     if extension:
         guessed_type = _get_file_type_by_extension(extension)
@@ -284,7 +350,7 @@ def _standardize_file_type(file_type: FileType, /, *, extension: str = "", mime_
         guessed_type = _get_file_type_by_mimetype(mime_type)
     return guessed_type or FileType.CUSTOM
 
-# cdg: 根据文件扩展名获取文件类型
+
 def _get_file_type_by_extension(extension: str) -> FileType | None:
     extension = extension.lstrip(".")
     if extension in IMAGE_EXTENSIONS:
@@ -297,7 +363,7 @@ def _get_file_type_by_extension(extension: str) -> FileType | None:
         return FileType.DOCUMENT
     return None
 
-# cdg: 根据MIME类型获取文件类型
+
 def _get_file_type_by_mimetype(mime_type: str) -> FileType | None:
     if "image" in mime_type:
         file_type = FileType.IMAGE
@@ -310,3 +376,79 @@ def _get_file_type_by_mimetype(mime_type: str) -> FileType | None:
     else:
         file_type = FileType.CUSTOM
     return file_type
+
+
+def get_file_type_by_mime_type(mime_type: str) -> FileType:
+    return _get_file_type_by_mimetype(mime_type) or FileType.CUSTOM
+
+
+class StorageKeyLoader:
+    """FileKeyLoader load the storage key from database for a list of files.
+    This loader is batched, the database query count is constant regardless of the input size.
+    """
+
+    def __init__(self, session: Session, tenant_id: str) -> None:
+        self._session = session
+        self._tenant_id = tenant_id
+
+    def _load_upload_files(self, upload_file_ids: Sequence[uuid.UUID]) -> Mapping[uuid.UUID, UploadFile]:
+        stmt = select(UploadFile).where(
+            UploadFile.id.in_(upload_file_ids),
+            UploadFile.tenant_id == self._tenant_id,
+        )
+
+        return {uuid.UUID(i.id): i for i in self._session.scalars(stmt)}
+
+    def _load_tool_files(self, tool_file_ids: Sequence[uuid.UUID]) -> Mapping[uuid.UUID, ToolFile]:
+        stmt = select(ToolFile).where(
+            ToolFile.id.in_(tool_file_ids),
+            ToolFile.tenant_id == self._tenant_id,
+        )
+        return {uuid.UUID(i.id): i for i in self._session.scalars(stmt)}
+
+    def load_storage_keys(self, files: Sequence[File]):
+        """Loads storage keys for a sequence of files by retrieving the corresponding
+        `UploadFile` or `ToolFile` records from the database based on their transfer method.
+
+        This method doesn't modify the input sequence structure but updates the `_storage_key`
+        property of each file object by extracting the relevant key from its database record.
+
+        Performance note: This is a batched operation where database query count remains constant
+        regardless of input size. However, for optimal performance, input sequences should contain
+        fewer than 1000 files. For larger collections, split into smaller batches and process each
+        batch separately.
+        """
+
+        upload_file_ids: list[uuid.UUID] = []
+        tool_file_ids: list[uuid.UUID] = []
+        for file in files:
+            related_model_id = file.related_id
+            if file.related_id is None:
+                raise ValueError("file id should not be None.")
+            if file.tenant_id != self._tenant_id:
+                err_msg = (
+                    f"invalid file, expected tenant_id={self._tenant_id}, "
+                    f"got tenant_id={file.tenant_id}, file_id={file.id}, related_model_id={related_model_id}"
+                )
+                raise ValueError(err_msg)
+            model_id = uuid.UUID(related_model_id)
+
+            if file.transfer_method in (FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL):
+                upload_file_ids.append(model_id)
+            elif file.transfer_method == FileTransferMethod.TOOL_FILE:
+                tool_file_ids.append(model_id)
+
+        tool_files = self._load_tool_files(tool_file_ids)
+        upload_files = self._load_upload_files(upload_file_ids)
+        for file in files:
+            model_id = uuid.UUID(file.related_id)
+            if file.transfer_method in (FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL):
+                upload_file_row = upload_files.get(model_id)
+                if upload_file_row is None:
+                    raise ValueError(f"Upload file not found for id: {model_id}")
+                file._storage_key = upload_file_row.key
+            elif file.transfer_method == FileTransferMethod.TOOL_FILE:
+                tool_file_row = tool_files.get(model_id)
+                if tool_file_row is None:
+                    raise ValueError(f"Tool file not found for id: {model_id}")
+                file._storage_key = tool_file_row.file_key

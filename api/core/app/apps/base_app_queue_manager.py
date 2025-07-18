@@ -2,7 +2,7 @@ import queue
 import time
 from abc import abstractmethod
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import DeclarativeMeta
 
@@ -23,8 +23,7 @@ class PublishFrom(Enum):
     APPLICATION_MANAGER = 1
     TASK_PIPELINE = 2
 
-# cdg:应用消息管理器，[MessageBasedAppQueueManager, WorkflowAppQueueManager] -> AppQueueManager
-# 负责启动监听、停止监听、消息发布等相关操作、
+
 class AppQueueManager:
     def __init__(self, task_id: str, user_id: str, invoke_from: InvokeFrom) -> None:
         if not user_id:
@@ -35,12 +34,10 @@ class AppQueueManager:
         self._invoke_from = invoke_from
 
         user_prefix = "account" if self._invoke_from in {InvokeFrom.EXPLORE, InvokeFrom.DEBUGGER} else "end-user"
-        # cdg:将任务信息写入Redis
         redis_client.setex(
             AppQueueManager._generate_task_belong_cache_key(self._task_id), 1800, f"{user_prefix}-{self._user_id}"
         )
 
-        # cdg:创建消息队列，用于存取WorkflowQueueMessage、MessageQueueMessage消息
         q: queue.Queue[WorkflowQueueMessage | MessageQueueMessage | None] = queue.Queue()
 
         self._q = q
@@ -51,12 +48,11 @@ class AppQueueManager:
         :return:
         """
         # wait for APP_MAX_EXECUTION_TIME seconds to stop listen
-        listen_timeout = dify_config.APP_MAX_EXECUTION_TIME  # cdg:每个应用最长在线时间
+        listen_timeout = dify_config.APP_MAX_EXECUTION_TIME
         start_time = time.time()
         last_ping_time: int | float = 0
         while True:
             try:
-                # cdg:从队列中读取消息，如果消息不为空则输出该消息
                 message = self._q.get(timeout=1)
                 if message is None:
                     break
@@ -74,7 +70,6 @@ class AppQueueManager:
                     )
 
                 if elapsed_time // 10 > last_ping_time:
-                    # cdg:每隔10秒发布一条ping消息，以保存应用在线
                     self.publish(QueuePingEvent(), PublishFrom.TASK_PIPELINE)
                     last_ping_time = elapsed_time // 10
 
@@ -120,7 +115,7 @@ class AppQueueManager:
         Set task stop flag
         :return:
         """
-        result = redis_client.get(cls._generate_task_belong_cache_key(task_id))
+        result: Optional[Any] = redis_client.get(cls._generate_task_belong_cache_key(task_id))
         if result is None:
             return
 
@@ -137,7 +132,6 @@ class AppQueueManager:
         :return:
         """
         stopped_cache_key = AppQueueManager._generate_stopped_cache_key(self._task_id)
-        # cdg:从Redis中读取停止消息，如果停止消息不存在，则说明任务还未停止，否则说明任务已经停止
         result = redis_client.get(stopped_cache_key)
         if result is not None:
             return True
@@ -163,7 +157,6 @@ class AppQueueManager:
         return f"generate_task_stopped:{task_id}"
 
     def _check_for_sqlalchemy_models(self, data: Any):
-        # cdg:迭代检查每一个元素值（包括自动或列表中的元素值）是否为DeclarativeMeta实例或者有_sa_instance_state属性
         # from entity to dict or list
         if isinstance(data, dict):
             for key, value in data.items():
@@ -174,8 +167,7 @@ class AppQueueManager:
         else:
             if isinstance(data, DeclarativeMeta) or hasattr(data, "_sa_instance_state"):
                 raise TypeError(
-                    "Critical Error: Passing SQLAlchemy Model instances "
-                    "that cause thread safety issues is not allowed."
+                    "Critical Error: Passing SQLAlchemy Model instances that cause thread safety issues is not allowed."
                 )
 
 

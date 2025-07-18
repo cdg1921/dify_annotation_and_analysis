@@ -15,14 +15,13 @@ from core.model_runtime.entities import (
     LLMResultChunkDelta,
     LLMUsage,
     PromptMessage,
-    PromptMessageContent,
     PromptMessageContentType,
     SystemPromptMessage,
     TextPromptMessageContent,
     ToolPromptMessage,
     UserPromptMessage,
 )
-from core.model_runtime.entities.message_entities import ImagePromptMessageContent
+from core.model_runtime.entities.message_entities import ImagePromptMessageContent, PromptMessageContentUnionTypes
 from core.prompt.agent_history_prompt_transform import AgentHistoryPromptTransform
 from core.tools.entities.tool_entities import ToolInvokeMeta
 from core.tools.tool_engine import ToolEngine
@@ -30,7 +29,7 @@ from models.model import Message
 
 logger = logging.getLogger(__name__)
 
-# cdg:FunctionCallAgentRunner -> BaseAgentRunner -> AppRunner
+
 class FunctionCallAgentRunner(BaseAgentRunner):
     def run(self, message: Message, query: str, **kwargs: Any) -> Generator[LLMResultChunk, None, None]:
         """
@@ -46,24 +45,27 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         # convert tools into ModelRuntime Tool format
         tool_instances, prompt_messages_tools = self._init_prompt_tools()
 
+        assert app_config.agent
+
         iteration_step = 1
-        max_iteration_steps = min(app_config.agent.max_iteration, 5) + 1
+        max_iteration_steps = min(app_config.agent.max_iteration, 99) + 1
 
         # continue to run until there is not any tool call
         function_call_state = True
-        llm_usage: dict[str, LLMUsage] = {"usage": LLMUsage.empty_usage()}
+        llm_usage: dict[str, Optional[LLMUsage]] = {"usage": None}
         final_answer = ""
 
         # get tracing instance
         trace_manager = app_generate_entity.trace_manager
 
-        def increase_usage(final_llm_usage_dict: dict[str, LLMUsage], usage: LLMUsage):
+        def increase_usage(final_llm_usage_dict: dict[str, Optional[LLMUsage]], usage: LLMUsage):
             if not final_llm_usage_dict["usage"]:
                 final_llm_usage_dict["usage"] = usage
             else:
                 llm_usage = final_llm_usage_dict["usage"]
                 llm_usage.prompt_tokens += usage.prompt_tokens
                 llm_usage.completion_tokens += usage.completion_tokens
+                llm_usage.total_tokens += usage.total_tokens
                 llm_usage.prompt_price += usage.prompt_price
                 llm_usage.completion_price += usage.completion_price
                 llm_usage.total_price += usage.total_price
@@ -73,13 +75,11 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         while function_call_state and iteration_step <= max_iteration_steps:
             function_call_state = False
 
-            # cdg:最后一次迭代不需要调用工具
             if iteration_step == max_iteration_steps:
                 # the last iteration, remove all tools
                 prompt_messages_tools = []
 
             message_file_ids: list[str] = []
-            # cdg:创建agent_thought实例
             agent_thought = self.create_agent_thought(
                 message_id=message.id, message="", tool_name="", tool_input="", messages_ids=message_file_ids
             )
@@ -109,7 +109,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
 
             current_llm_usage = None
 
-            if self.stream_tool_call and isinstance(chunks, Generator):
+            if isinstance(chunks, Generator):
                 is_first_chunk = True
                 for chunk in chunks:
                     if is_first_chunk:
@@ -126,7 +126,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                             tool_call_inputs = json.dumps(
                                 {tool_call[1]: tool_call[2] for tool_call in tool_calls}, ensure_ascii=False
                             )
-                        except json.JSONDecodeError as e:
+                        except json.JSONDecodeError:
                             # ensure ascii to avoid encoding error
                             tool_call_inputs = json.dumps({tool_call[1]: tool_call[2] for tool_call in tool_calls})
 
@@ -142,7 +142,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                         current_llm_usage = chunk.delta.usage
 
                     yield chunk
-            elif not self.stream_tool_call and isinstance(chunks, LLMResult):
+            else:
                 result = chunks
                 # check if there is any tool call
                 if self.check_blocking_tool_calls(result):
@@ -153,7 +153,7 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                         tool_call_inputs = json.dumps(
                             {tool_call[1]: tool_call[2] for tool_call in tool_calls}, ensure_ascii=False
                         )
-                    except json.JSONDecodeError as e:
+                    except json.JSONDecodeError:
                         # ensure ascii to avoid encoding error
                         tool_call_inputs = json.dumps({tool_call[1]: tool_call[2] for tool_call in tool_calls})
 
@@ -185,8 +185,6 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                         usage=result.usage,
                     ),
                 )
-            else:
-                raise RuntimeError(f"invalid chunks type: {type(chunks)}")
 
             assistant_message = AssistantPromptMessage(content="", tool_calls=[])
             if tool_calls:
@@ -245,15 +243,12 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                         invoke_from=self.application_generate_entity.invoke_from,
                         agent_tool_callback=self.agent_callback,
                         trace_manager=trace_manager,
+                        app_id=self.application_generate_entity.app_config.app_id,
+                        message_id=self.message.id,
+                        conversation_id=self.conversation.id,
                     )
                     # publish files
-                    for message_file_id, save_as in message_files:
-                        if save_as:
-                            if self.variables_pool:
-                                self.variables_pool.set_file(
-                                    tool_name=tool_call_name, value=message_file_id, name=save_as
-                                )
-
+                    for message_file_id in message_files:
                         # publish message file
                         self.queue_manager.publish(
                             QueueMessageFileEvent(message_file_id=message_file_id), PublishFrom.APPLICATION_MANAGER
@@ -305,8 +300,6 @@ class FunctionCallAgentRunner(BaseAgentRunner):
 
             iteration_step += 1
 
-        if self.variables_pool and self.db_variables_pool:
-            self.update_db_variables(self.variables_pool, self.db_variables_pool)
         # publish end event
         self.queue_manager.publish(
             QueueMessageEndEvent(
@@ -337,16 +330,13 @@ class FunctionCallAgentRunner(BaseAgentRunner):
             return True
         return False
 
-    def extract_tool_calls(
-        self, llm_result_chunk: LLMResultChunk
-    ) -> Union[None, list[tuple[str, str, dict[str, Any]]]]:
+    def extract_tool_calls(self, llm_result_chunk: LLMResultChunk) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Extract tool calls from llm result chunk
 
         Returns:
             List[Tuple[str, str, Dict[str, Any]]]: [(tool_call_id, tool_call_name, tool_call_args)]
         """
-        # cdg:从大模型输出结果（即智能体思考结果）中抽取函数名称和参数，针对流式模式
         tool_calls = []
         for prompt_message in llm_result_chunk.delta.message.tool_calls:
             args = {}
@@ -363,14 +353,13 @@ class FunctionCallAgentRunner(BaseAgentRunner):
 
         return tool_calls
 
-    def extract_blocking_tool_calls(self, llm_result: LLMResult) -> Union[None, list[tuple[str, str, dict[str, Any]]]]:
+    def extract_blocking_tool_calls(self, llm_result: LLMResult) -> list[tuple[str, str, dict[str, Any]]]:
         """
         Extract blocking tool calls from llm result
 
         Returns:
             List[Tuple[str, str, Dict[str, Any]]]: [(tool_call_id, tool_call_name, tool_call_args)]
         """
-        # cdg:从大模型输出结果（即智能体思考结果）中抽取函数名称和参数，针对阻塞模式。阻塞模式和流式结果格式不一样，tool_calls存放的位置也不一样
         tool_calls = []
         for prompt_message in llm_result.message.tool_calls:
             args = {}
@@ -387,21 +376,15 @@ class FunctionCallAgentRunner(BaseAgentRunner):
 
         return tool_calls
 
-    def _init_system_message(
-        self, prompt_template: str, prompt_messages: Optional[list[PromptMessage]] = None
-    ) -> list[PromptMessage]:
+    def _init_system_message(self, prompt_template: str, prompt_messages: list[PromptMessage]) -> list[PromptMessage]:
         """
         Initialize system message
         """
-        # cdg:初始化系统提示词，如果history_prompt_messages为空，则直接返回prompt_template，
-        # 否则检查prompt_messages中第一条是否为系统提示词，如果不是，则在prompt_messages第一条的位置插入系统提示词并返回prompt_messages，
-        # 实际上prompt_messages是history_prompt_messages
         if not prompt_messages and prompt_template:
             return [
                 SystemPromptMessage(content=prompt_template),
             ]
 
-        # cdg:如果第一条Prompt不是系统Prompt，则构建系统Prompt并插入第一位置
         if prompt_messages and not isinstance(prompt_messages[0], SystemPromptMessage) and prompt_template:
             prompt_messages.insert(0, SystemPromptMessage(content=prompt_template))
 
@@ -411,9 +394,8 @@ class FunctionCallAgentRunner(BaseAgentRunner):
         """
         Organize user query
         """
-        # cdg:主要检查是否存在文件（特别是图片），将文件内容放在提示词中（仅针对第一个迭代，后续每个迭代中文件内容用“image”或者“file”进行标识）
         if self.files:
-            prompt_message_contents: list[PromptMessageContent] = []
+            prompt_message_contents: list[PromptMessageContentUnionTypes] = []
             prompt_message_contents.append(TextPromptMessageContent(data=query))
 
             # get image detail config
@@ -427,7 +409,6 @@ class FunctionCallAgentRunner(BaseAgentRunner):
             )
             image_detail_config = image_detail_config or ImagePromptMessageContent.DETAIL.LOW
             for file in self.files:
-                # cdg:抽取文件内容，同时记录文件类型、URL、扩展名等信息
                 prompt_message_contents.append(
                     file_manager.to_prompt_message_content(
                         file,
@@ -435,7 +416,6 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                     )
                 )
 
-            # cdg:将文件内容放到UserPromptMessage中
             prompt_messages.append(UserPromptMessage(content=prompt_message_contents))
         else:
             prompt_messages.append(UserPromptMessage(content=query))
@@ -462,25 +442,12 @@ class FunctionCallAgentRunner(BaseAgentRunner):
                             for content in prompt_message.content
                         ]
                     )
-                    # cdg:上述两个if的逻辑如下
-                    """
-                    if content.type == PromptMessageContentType.TEXT:
-                        content.data
-                    else:
-                        if content.type == PromptMessageContentType.IMAGE:
-                            "[image]"
-                        else:
-                            "[file]"
-                    """
 
         return prompt_messages
 
     def _organize_prompt_messages(self):
         prompt_template = self.app_config.prompt_template.simple_prompt_template or ""
-        # cdg:初始化系统提示词，如果history_prompt_messages为空，则直接返回prompt_template，
-        # 否则检查history_prompt_messages中第一条是否为系统提示词，如果不是，则在history_prompt_messages第一条的位置插入系统提示词并返回history_prompt_messages
         self.history_prompt_messages = self._init_system_message(prompt_template, self.history_prompt_messages)
-        # cdg: 构建用户提示词，主要检查和处理文件类型数据
         query_prompt_messages = self._organize_user_query(self.query or "", [])
 
         self.history_prompt_messages = AgentHistoryPromptTransform(

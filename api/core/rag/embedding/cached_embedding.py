@@ -18,14 +18,12 @@ from models.dataset import Embedding
 
 logger = logging.getLogger(__name__)
 
-# cdg:CacheEmbedding的功能是为了避免每次都调用模型进行embedding，而是将embedding结果缓存到数据库中，
-# 然后每次调用时先从数据库中查找，如果存在则直接返回，如果不存在则调用模型进行embedding，并将结果缓存到数据库中。
+
 class CacheEmbedding(Embeddings):
     def __init__(self, model_instance: ModelInstance, user: Optional[str] = None) -> None:
         self._model_instance = model_instance
         self._user = user
 
-    # cdg:对texts进行embedding，如果embedding结果已经存在，则直接返回，否则调用模型进行embedding，并将结果缓存到数据库中。
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed search docs in batches of 10."""
         # use doc embedding cache or store if not exists
@@ -76,7 +74,7 @@ class CacheEmbedding(Embeddings):
                             embedding_queue_embeddings.append(normalized_embedding)
                         except IntegrityError:
                             db.session.rollback()
-                        except Exception as e:
+                        except Exception:
                             logging.exception("Failed transform embedding")
                 cache_embeddings = []
                 try:
@@ -141,4 +139,4 @@ class CacheEmbedding(Embeddings):
                 logging.exception(f"Failed to add embedding to redis for the text '{text[:10]}...({len(text)} chars)'")
             raise ex
 
-        return embedding_results
+        return embedding_results  # type: ignore

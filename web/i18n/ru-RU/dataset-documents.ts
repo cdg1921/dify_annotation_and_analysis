@@ -29,6 +29,8 @@ const translation = {
       delete: 'Удалить',
       enableWarning: 'Архивный файл не может быть включен',
       sync: 'Синхронизировать',
+      resume: 'Продовжити',
+      pause: 'Пауза',
     },
     index: {
       enable: 'Включить',
@@ -133,7 +135,7 @@ const translation = {
         language: 'Язык',
         authorPublisher: 'Автор/Издатель',
         publishDate: 'Дата публикации',
-        topicsKeywords: 'Темы/Ключевые слова',
+        topicKeywords: 'Темы/Ключевые слова',
         description: 'Описание',
       },
       paper: {
@@ -389,6 +391,8 @@ const translation = {
     characters_one: 'характер',
     addChildChunk: 'Добавить дочерний чанк',
     newChildChunk: 'Новый дочерний чанк',
+    keywordEmpty: 'Ключевое слово не может быть пустым',
+    keywordDuplicate: 'Ключевое слово уже существует',
   },
 }
 

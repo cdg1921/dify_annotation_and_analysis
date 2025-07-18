@@ -2,7 +2,7 @@ from decimal import Decimal
 from enum import Enum, StrEnum
 from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from core.model_runtime.entities.common_entities import I18nObject
 
@@ -18,7 +18,6 @@ class ModelType(Enum):
     SPEECH2TEXT = "speech2text"
     MODERATION = "moderation"
     TTS = "tts"
-    TEXT2IMG = "text2img"
 
     @classmethod
     def value_of(cls, origin_model_type: str) -> "ModelType":
@@ -37,8 +36,6 @@ class ModelType(Enum):
             return cls.SPEECH2TEXT
         elif origin_model_type in {"tts", cls.TTS.value}:
             return cls.TTS
-        elif origin_model_type in {"text2img", cls.TEXT2IMG.value}:
-            return cls.TEXT2IMG
         elif origin_model_type == cls.MODERATION.value:
             return cls.MODERATION
         else:
@@ -62,8 +59,6 @@ class ModelType(Enum):
             return "tts"
         elif self == self.MODERATION:
             return "moderation"
-        elif self == self.TEXT2IMG:
-            return "text2img"
         else:
             raise ValueError(f"invalid model type {self}")
 
@@ -73,8 +68,8 @@ class FetchFrom(Enum):
     Enum class for fetch from.
     """
 
-    PREDEFINED_MODEL = "predefined-model"         # cdg:预定义（内置）模型
-    CUSTOMIZABLE_MODEL = "customizable-model"     # cdg:用户自定义模型
+    PREDEFINED_MODEL = "predefined-model"
+    CUSTOMIZABLE_MODEL = "customizable-model"
 
 
 class ModelFeature(Enum):
@@ -90,6 +85,7 @@ class ModelFeature(Enum):
     DOCUMENT = "document"
     VIDEO = "video"
     AUDIO = "audio"
+    STRUCTURED_OUTPUT = "structured-output"
 
 
 class DefaultParameterName(StrEnum):
@@ -100,21 +96,8 @@ class DefaultParameterName(StrEnum):
     TEMPERATURE = "temperature"
     TOP_P = "top_p"
     TOP_K = "top_k"
-    # cdg:Presence Penalty（存在惩罚,取值范围：-2.0到2.0，默认为0）, 用于惩罚在生成文本中已经出现过的词汇。
-    # 其目的是鼓励模型在生成过程中引入新的词汇或概念，避免重复。
-    # 当presence_penalty的值增加时，模型会更倾向于使用尚未出现过的词汇，有助于提高生成文本的多样性和新颖性。
-    # 适用于需要生成多样化内容的场景，例如创作、故事生成等。
     PRESENCE_PENALTY = "presence_penalty"
-    # cdg:Frequency Penalty（频率惩罚,取值范围：-2.0到2.0，默认为0）,用于惩罚在生成文本中频繁出现的词汇。
-    # 其目的是减少某些词汇的重复使用，尤其是那些在上下文中已经多次出现的词汇。
-    # 当frequency_penalty的值增加时，模型会对已经出现过多次的词汇施加更大的惩罚，从而降低它们在后续生成中的出现概率，有助于避免生成文本中的冗余和重复。
     FREQUENCY_PENALTY = "frequency_penalty"
-    # cdg:对比：
-    # （1）presence_penalty关注的是词汇是否出现过（即是否存在），而frequency_penalty关注的是词汇出现的频率（即出现次数）。
-    # （2）presence_penalty主要鼓励引入新词汇，而frequency_penalty则主要减少常用词汇的重复使用。
-    # （3）presence_penalty更加关注文本的多样性，而frequency_penalty更加关注文本的流畅性和可读性。
-
-    # cdg:max_tokens是模型输出的token长度，不包含输入
     MAX_TOKENS = "max_tokens"
     RESPONSE_FORMAT = "response_format"
     JSON_SCHEMA = "json_schema"
@@ -163,23 +146,25 @@ class ModelPropertyKey(Enum):
     MAX_WORKERS = "max_workers"
 
 
-# 供应商模型结构体
 class ProviderModel(BaseModel):
     """
     Model class for provider model.
     """
 
     model: str
-    label: I18nObject                                       # cdg:模型标识，用于展示，I18nObject支持便于切换系统语言
-    model_type: ModelType                                   # cdg:LLM、Embedding、Reranker等
-    features: Optional[list[ModelFeature]] = None           # cdg:模型特性，是否支持智能体、工具调用、视觉、语音等
+    label: I18nObject
+    model_type: ModelType
+    features: Optional[list[ModelFeature]] = None
     fetch_from: FetchFrom
     model_properties: dict[ModelPropertyKey, Any]
-    deprecated: bool = False                                # cdg:是否废弃（不能使用）
+    deprecated: bool = False
     model_config = ConfigDict(protected_namespaces=())
 
+    @property
+    def support_structure_output(self) -> bool:
+        return self.features is not None and ModelFeature.STRUCTURED_OUTPUT in self.features
 
-# cdg:参数结构体
+
 class ParameterRule(BaseModel):
     """
     Model class for parameter rule.
@@ -203,20 +188,32 @@ class PriceConfig(BaseModel):
     Model class for pricing info.
     """
 
-    input: Decimal                        # cdg:输入费用
-    output: Optional[Decimal] = None      # cdg:输出费用
-    unit: Decimal                         # cdg:计费单位，如token、千token等
-    currency: str                         # 币种
+    input: Decimal
+    output: Optional[Decimal] = None
+    unit: Decimal
+    currency: str
 
 
 class AIModelEntity(ProviderModel):
     """
     Model class for AI model.
     """
-    # cdg:基础实体对象之一
-    # cdg:AIModelEntity包含模型的各种参数信息及其计费方式，通用AIModel属性，还未涉及具体实例
-    parameter_rules: list[ParameterRule] = []   # cdg:参数结构列表
-    pricing: Optional[PriceConfig] = None       # cdg:计费方式
+
+    parameter_rules: list[ParameterRule] = []
+    pricing: Optional[PriceConfig] = None
+
+    @model_validator(mode="after")
+    def validate_model(self):
+        supported_schema_keys = ["json_schema"]
+        schema_key = next((rule.name for rule in self.parameter_rules if rule.name in supported_schema_keys), None)
+        if not schema_key:
+            return self
+        if self.features is None:
+            self.features = [ModelFeature.STRUCTURED_OUTPUT]
+        else:
+            if ModelFeature.STRUCTURED_OUTPUT not in self.features:
+                self.features.append(ModelFeature.STRUCTURED_OUTPUT)
+        return self
 
 
 class ModelUsage(BaseModel):

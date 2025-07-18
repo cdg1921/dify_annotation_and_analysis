@@ -1,4 +1,4 @@
-ENGLISH_REACT_COMPLETION_PROMPT_TEMPLATES = """Respond to the human as helpfully and accurately as possible. 
+ENGLISH_REACT_COMPLETION_PROMPT_TEMPLATES = """Respond to the human as helpfully and accurately as possible.
 
 {{instruction}}
 
@@ -47,7 +47,7 @@ Thought:"""  # noqa: E501
 ENGLISH_REACT_COMPLETION_AGENT_SCRATCHPAD_TEMPLATES = """Observation: {{observation}}
 Thought:"""
 
-ENGLISH_REACT_CHAT_PROMPT_TEMPLATES = """Respond to the human as helpfully and accurately as possible. 
+ENGLISH_REACT_CHAT_PROMPT_TEMPLATES = """Respond to the human as helpfully and accurately as possible.
 
 {{instruction}}
 
@@ -92,7 +92,6 @@ Begin! Reminder to ALWAYS respond with a valid json blob of a single action. Use
 
 ENGLISH_REACT_CHAT_AGENT_SCRATCHPAD_TEMPLATES = ""
 
-# cdg:react提示词模板
 REACT_PROMPT_TEMPLATES = {
     "english": {
         "chat": {

@@ -28,6 +28,8 @@ const translation = {
       delete: '刪除',
       enableWarning: '歸檔的檔案無法啟用',
       sync: '同步',
+      resume: '恢復',
+      pause: '暫停',
     },
     index: {
       enable: '啟用中',
@@ -132,7 +134,7 @@ const translation = {
         language: '語言',
         authorPublisher: '作者/出版商',
         publishDate: '釋出日期',
-        topicsKeywords: '主題/關鍵詞',
+        topicKeywords: '主題/關鍵詞',
         description: '描述',
       },
       paper: {
@@ -355,7 +357,7 @@ const translation = {
     addChunk: '添加數據塊',
     addChildChunk: '添加子塊',
     addAnother: '添加另一個',
-    childChunkAdded: '添加了1個子塊',
+    childChunkAdded: '添加了 1 個子塊',
     editParentChunk: '編輯父塊（Edit Parent Chunk）',
     editChildChunk: '編輯子塊',
     chunkDetail: '數據塊詳細資訊',
@@ -388,6 +390,8 @@ const translation = {
     searchResults_zero: '結果',
     parentChunks_other: '父塊',
     newChildChunk: '新兒童塊',
+    keywordEmpty: '關鍵字不能為空',
+    keywordDuplicate: '關鍵字已經存在',
   },
 }
 

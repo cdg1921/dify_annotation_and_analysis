@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Mapping, Sequence
 from typing import Any, Optional
 
 from core.agent.base_agent_runner import BaseAgentRunner
@@ -18,23 +18,20 @@ from core.model_runtime.entities.message_entities import (
 )
 from core.ops.ops_trace_manager import TraceQueueManager
 from core.prompt.agent_history_prompt_transform import AgentHistoryPromptTransform
+from core.tools.__base.tool import Tool
 from core.tools.entities.tool_entities import ToolInvokeMeta
-from core.tools.tool.tool import Tool
 from core.tools.tool_engine import ToolEngine
 from models.model import Message
 
-# cdg:CotAgentRunner -> BaseAgentRunner -> AppRunner
+
 class CotAgentRunner(BaseAgentRunner, ABC):
-    _is_first_iteration = True                                     # cdg:是否首次迭代，默认为True
-    _ignore_observation_providers = ["wenxin"]                     # cdg:忽略文心一言模型
-    _historic_prompt_messages: list[PromptMessage] | None = None   # cdg:历史会话记录
-    # cdg:Agent Scratchpad是一个用于增强智能体（如聊天机器人或自动化系统）功能的工具。
-    # Agent Scratchpad提供一个临时的存储空间，用于保存智能体在处理任务时生成的中间结果、思路或数据,
-    # 使得智能体能够在执行复杂任务时保持上下文。
-    _agent_scratchpad: list[AgentScratchpadUnit] | None = None
-    _instruction: str = ""  # FIXME this must be str for now       # cdg:开场白
-    _query: str | None = None
-    _prompt_messages_tools: list[PromptMessageTool] = []
+    _is_first_iteration = True
+    _ignore_observation_providers = ["wenxin"]
+    _historic_prompt_messages: list[PromptMessage]
+    _agent_scratchpad: list[AgentScratchpadUnit]
+    _instruction: str
+    _query: str
+    _prompt_messages_tools: Sequence[PromptMessageTool]
 
     def run(
         self,
@@ -45,41 +42,37 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         """
         Run Cot agent application
         """
-        # cdg:基于思维链的智能体运行函数
+
         app_generate_entity = self.application_generate_entity
-        self._repack_app_generate_entity(app_generate_entity)  # cdg:生成式实体（大模型）包装，实际上就是当提示词模板为空时，设置为空值
-        # cdg:初始化COT状态，包括查询、Scratchpad、历史消息
+        self._repack_app_generate_entity(app_generate_entity)
         self._init_react_state(query)
 
-        # cdg:任务跟踪器
         trace_manager = app_generate_entity.trace_manager
 
         # check model mode
         if "Observation" not in app_generate_entity.model_conf.stop:
-            # cdg:模型供应商存在且不为可以忽略的供应商
             if app_generate_entity.model_conf.provider not in self._ignore_observation_providers:
                 app_generate_entity.model_conf.stop.append("Observation")
 
         app_config = self.app_config
+        assert app_config.agent
 
         # init instruction
         inputs = inputs or {}
-        instruction = app_config.prompt_template.simple_prompt_template
-        # cdg:利用外部数据补全instruction
-        self._instruction = self._fill_in_inputs_from_external_data_tools(instruction=instruction or "", inputs=inputs)
+        instruction = app_config.prompt_template.simple_prompt_template or ""
+        self._instruction = self._fill_in_inputs_from_external_data_tools(instruction, inputs)
 
         iteration_step = 1
-        # cdg:max_iteration_steps不小于6
-        max_iteration_steps = min(app_config.agent.max_iteration if app_config.agent else 5, 5) + 1
+        max_iteration_steps = min(app_config.agent.max_iteration, 99) + 1
 
         # convert tools into ModelRuntime Tool format
-        tool_instances, self._prompt_messages_tools = self._init_prompt_tools()
+        tool_instances, prompt_messages_tools = self._init_prompt_tools()
+        self._prompt_messages_tools = prompt_messages_tools
 
         function_call_state = True
         llm_usage: dict[str, Optional[LLMUsage]] = {"usage": None}
         final_answer = ""
 
-        # cdg:计算已使用的token数量
         def increase_usage(final_llm_usage_dict: dict[str, Optional[LLMUsage]], usage: LLMUsage):
             if not final_llm_usage_dict["usage"]:
                 final_llm_usage_dict["usage"] = usage
@@ -87,6 +80,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                 llm_usage = final_llm_usage_dict["usage"]
                 llm_usage.prompt_tokens += usage.prompt_tokens
                 llm_usage.completion_tokens += usage.completion_tokens
+                llm_usage.total_tokens += usage.total_tokens
                 llm_usage.prompt_price += usage.prompt_price
                 llm_usage.completion_price += usage.completion_price
                 llm_usage.total_price += usage.total_price
@@ -95,33 +89,27 @@ class CotAgentRunner(BaseAgentRunner, ABC):
 
         while function_call_state and iteration_step <= max_iteration_steps:
             # continue to run until there is not any tool call
-            # cdg:在给定的steps内循环执行直至没有工具可以调用
             function_call_state = False
 
-            # cdg:最后一步进行总结，不再调用工具，否则就没有总结的步骤，直接输出工具调用的结果是不合适的
             if iteration_step == max_iteration_steps:
                 # the last iteration, remove all tools
                 self._prompt_messages_tools = []
 
             message_file_ids: list[str] = []
 
-            # cdg:创建包含智能体思考内容的消息对象，并更新到数据库中
             agent_thought = self.create_agent_thought(
                 message_id=message.id, message="", tool_name="", tool_input="", messages_ids=message_file_ids
             )
 
-            # cdg:Agent执行过程记录到消息队列中，中间过程为思考过程，Event类型为QueueAgentThoughtEvent
             if iteration_step > 1:
                 self.queue_manager.publish(
                     QueueAgentThoughtEvent(agent_thought_id=agent_thought.id), PublishFrom.APPLICATION_MANAGER
                 )
 
             # recalc llm max tokens
-            # cdg:更新提示词消息并重新计算可用的max_tokens
             prompt_messages = self._organize_prompt_messages()
             self.recalc_llm_max_tokens(self.model_config, prompt_messages)
             # invoke model
-            # cdg:调用大模型进行思考，并返回大模型生成的结果，这里指定了stream模式
             chunks = model_instance.invoke_llm(
                 prompt_messages=prompt_messages,
                 model_parameters=app_generate_entity.model_conf.parameters,
@@ -132,22 +120,8 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                 callbacks=[],
             )
 
-            # cdg:上一行已经指定写死为“stream=True”，确保输出结果是流式的
-            if not isinstance(chunks, Generator):
-                raise ValueError("Expected streaming response from LLM")
-
-            # cdg:通过检查返回结果是否为空，以判断大模型调用是否成功
-            # check llm result
-            if not chunks:
-                raise ValueError("failed to invoke llm")
-
-            # cdg:tokens使用情况初始化
-            usage_dict: dict[str, Optional[LLMUsage]] = {"usage": None}
-
-            # cdg:大模型返回结果整理，返回结果为Markdown格式信息，可能包含多种不同格式内容，如代码、json等，需要整理成正常的格式
+            usage_dict: dict[str, Optional[LLMUsage]] = {}
             react_chunks = CotAgentOutputParser.handle_react_stream_output(chunks, usage_dict)
-
-            # cdg:初始化一个AgentScratchpadUnit对象，一个AgentScratchpad单元，AgentScratchpad是由多个AgentScratchpadUnit组成的list
             scratchpad = AgentScratchpadUnit(
                 agent_response="",
                 thought="",
@@ -163,20 +137,18 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                 )
 
             for chunk in react_chunks:
-                # cdg:是否Action对象，包括Action的名称、输入
                 if isinstance(chunk, AgentScratchpadUnit.Action):
                     action = chunk
                     # detect action
-                    if scratchpad.agent_response is not None:
-                        scratchpad.agent_response += json.dumps(chunk.model_dump())
+                    assert scratchpad.agent_response is not None
+                    scratchpad.agent_response += json.dumps(chunk.model_dump())
                     scratchpad.action_str = json.dumps(chunk.model_dump())
                     scratchpad.action = action
                 else:
-                    # cdg:此时chunk为一个字符串
-                    if scratchpad.agent_response is not None:
-                        scratchpad.agent_response += chunk
-                    if scratchpad.thought is not None:
-                        scratchpad.thought += chunk
+                    assert scratchpad.agent_response is not None
+                    scratchpad.agent_response += chunk
+                    assert scratchpad.thought is not None
+                    scratchpad.thought += chunk
                     yield LLMResultChunk(
                         model=self.model_config.model,
                         prompt_messages=prompt_messages,
@@ -184,11 +156,9 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                         delta=LLMResultChunkDelta(index=0, message=AssistantPromptMessage(content=chunk), usage=None),
                     )
 
-            # cdg:智能体有想法则直接输出想法，没想法就说正在思考
-            if scratchpad.thought is not None:
-                scratchpad.thought = scratchpad.thought.strip() or "I am thinking about how to help you"
-            if self._agent_scratchpad is not None:
-                self._agent_scratchpad.append(scratchpad)
+            assert scratchpad.thought is not None
+            scratchpad.thought = scratchpad.thought.strip() or "I am thinking about how to help you"
+            self._agent_scratchpad.append(scratchpad)
 
             # get llm usage
             if "usage" in usage_dict:
@@ -199,7 +169,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
 
             self.save_agent_thought(
                 agent_thought=agent_thought,
-                tool_name=scratchpad.action.action_name if scratchpad.action else "",
+                tool_name=(scratchpad.action.action_name if scratchpad.action and not scratchpad.is_final() else ""),
                 tool_input={scratchpad.action.action_name: scratchpad.action.action_input} if scratchpad.action else {},
                 tool_invoke_meta={},
                 thought=scratchpad.thought or "",
@@ -209,7 +179,6 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                 llm_usage=usage_dict["usage"],
             )
 
-            # cdg:还没结束，发布思考事件，如果结束，则发布结束事件
             if not scratchpad.is_final():
                 self.queue_manager.publish(
                     QueueAgentThoughtEvent(agent_thought_id=agent_thought.id), PublishFrom.APPLICATION_MANAGER
@@ -217,15 +186,13 @@ class CotAgentRunner(BaseAgentRunner, ABC):
 
             if not scratchpad.action:
                 # failed to extract action, return final answer directly
-                # cdg:执行action失败，会返回空的action，这时最终的答案应该为空值
                 final_answer = ""
             else:
                 if scratchpad.action.action_name.lower() == "final answer":
                     # action is final answer, return final answer directly
-                    # cdg:最终的回答阶段，直接返回结果
                     try:
                         if isinstance(scratchpad.action.action_input, dict):
-                            final_answer = json.dumps(scratchpad.action.action_input)
+                            final_answer = json.dumps(scratchpad.action.action_input, ensure_ascii=False)
                         elif isinstance(scratchpad.action.action_input, str):
                             final_answer = scratchpad.action.action_input
                         else:
@@ -241,7 +208,6 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                         message_file_ids=message_file_ids,
                         trace_manager=trace_manager,
                     )
-                    # cdg:将工具调用返回的结果作为智能体观察的内容，同时作为智能体的输出
                     scratchpad.observation = tool_invoke_response
                     scratchpad.agent_response = tool_invoke_response
 
@@ -287,11 +253,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
             answer=final_answer,
             messages_ids=[],
         )
-        # cdg:将会话变量的值更新到数据库中
-        if self.variables_pool is not None and self.db_variables_pool is not None:
-            self.update_db_variables(self.variables_pool, self.db_variables_pool)
         # publish end event
-        # cdg:发布结束事件到消息队列，宣告智能体执行结束
         self.queue_manager.publish(
             QueueMessageEndEvent(
                 llm_result=LLMResult(
@@ -308,7 +270,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
     def _handle_invoke_action(
         self,
         action: AgentScratchpadUnit.Action,
-        tool_instances: dict[str, Tool],
+        tool_instances: Mapping[str, Tool],
         message_file_ids: list[str],
         trace_manager: Optional[TraceQueueManager] = None,
     ) -> tuple[str, ToolInvokeMeta]:
@@ -321,7 +283,6 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         :return: observation, meta
         """
         # action is tool call, invoke tool
-        # cdg:调用工具执行Action
         tool_call_name = action.action_name
         tool_call_args = action.action_input
         tool_instance = tool_instances.get(tool_call_name)
@@ -349,11 +310,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         )
 
         # publish files
-        for message_file_id, save_as in message_files:
-            if save_as is not None and self.variables_pool:
-                # FIXME the save_as type is confusing, it should be a string or not
-                self.variables_pool.set_file(tool_name=tool_call_name, value=message_file_id, name=str(save_as))
-
+        for message_file_id in message_files:
             # publish message file
             self.queue_manager.publish(
                 QueueMessageFileEvent(message_file_id=message_file_id), PublishFrom.APPLICATION_MANAGER
@@ -376,7 +333,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         for key, value in inputs.items():
             try:
                 instruction = instruction.replace(f"{{{{{key}}}}}", str(value))
-            except Exception as e:
+            except Exception:
                 continue
 
         return instruction
@@ -385,7 +342,6 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         """
         init agent scratchpad
         """
-        # cdg:初始化agent scratchpad。agent scratchpad与常见LLM scratchpad的区别
         self._query = query
         self._agent_scratchpad = []
         self._historic_prompt_messages = self._organize_historic_prompt_messages()
@@ -400,7 +356,6 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         """
         format assistant message
         """
-        # cdg:将agent_scratchpad的内容转为字符串
         message = ""
         for scratchpad in agent_scratchpad:
             if scratchpad.is_final():
@@ -415,7 +370,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         return message
 
     def _organize_historic_prompt_messages(
-        self, current_session_messages: Optional[list[PromptMessage]] = None
+        self, current_session_messages: list[PromptMessage] | None = None
     ) -> list[PromptMessage]:
         """
         organize historic prompt messages
@@ -427,8 +382,7 @@ class CotAgentRunner(BaseAgentRunner, ABC):
         for message in self.history_prompt_messages:
             if isinstance(message, AssistantPromptMessage):
                 if not current_scratchpad:
-                    if not isinstance(message.content, str | None):
-                        raise NotImplementedError("expected str type")
+                    assert isinstance(message.content, str)
                     current_scratchpad = AgentScratchpadUnit(
                         agent_response=message.content,
                         thought=message.content or "I am thinking about how to help you",
@@ -447,14 +401,12 @@ class CotAgentRunner(BaseAgentRunner, ABC):
                     except:
                         pass
             elif isinstance(message, ToolPromptMessage):
-                if not current_scratchpad:
-                    continue
-                if isinstance(message.content, str):
+                if current_scratchpad:
+                    assert isinstance(message.content, str)
                     current_scratchpad.observation = message.content
                 else:
                     raise NotImplementedError("expected str type")
             elif isinstance(message, UserPromptMessage):
-                # cdg:两次userMessage之间的智能体执行的内容为一个scratchpads
                 if scratchpads:
                     result.append(AssistantPromptMessage(content=self._format_assistant_message(scratchpads)))
                     scratchpads = []

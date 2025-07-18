@@ -6,43 +6,51 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from typing import TYPE_CHECKING, Any, Literal, Optional, cast
 
+from core.plugin.entities.plugin import GenericProviderID
+from core.tools.entities.tool_entities import ToolProviderType
+from core.tools.signature import sign_tool_file
+from core.workflow.entities.workflow_execution import WorkflowExecutionStatus
+
+if TYPE_CHECKING:
+    from models.workflow import Workflow
+
 import sqlalchemy as sa
 from flask import request
-from flask_login import UserMixin  # type: ignore
-from sqlalchemy import Float, func, text
-from sqlalchemy.orm import Mapped, mapped_column
+from flask_login import UserMixin
+from sqlalchemy import Float, Index, PrimaryKeyConstraint, func, text
+from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from configs import dify_config
+from constants import DEFAULT_FILE_NUMBER_LIMITS
 from core.file import FILE_MODEL_IDENTITY, File, FileTransferMethod, FileType
 from core.file import helpers as file_helpers
-from core.file.tool_file_parser import ToolFileParser
 from libs.helper import generate_string
-from models.enums import CreatedByRole
-from models.workflow import WorkflowRunStatus
 
 from .account import Account, Tenant
+from .base import Base
 from .engine import db
+from .enums import CreatorUserRole
 from .types import StringUUID
 
 if TYPE_CHECKING:
     from .workflow import Workflow
 
-# cdg: 定义DifySetup模型，安装配置信息，包括版本号和安装时间。
-class DifySetup(db.Model):  # type: ignore[name-defined]
+
+class DifySetup(Base):
     __tablename__ = "dify_setups"
     __table_args__ = (db.PrimaryKeyConstraint("version", name="dify_setup_pkey"),)
 
     version = db.Column(db.String(255), nullable=False)
     setup_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义AppMode枚举，表示应用模式，包括completion、workflow、chat、advanced-chat、agent-chat、channel。
+
 class AppMode(StrEnum):
-    COMPLETION = "completion"  # cdg: 文本补全模式
-    WORKFLOW = "workflow"  # cdg: 工作流模式
-    CHAT = "chat"  # cdg: 聊天模式
-    ADVANCED_CHAT = "advanced-chat"  # cdg: 高级聊天模式
-    AGENT_CHAT = "agent-chat"  # cdg: 智能体聊天模式
-    CHANNEL = "channel"  # cdg: 渠道模式
+    COMPLETION = "completion"
+    WORKFLOW = "workflow"
+    CHAT = "chat"
+    ADVANCED_CHAT = "advanced-chat"
+    AGENT_CHAT = "agent-chat"
+    CHANNEL = "channel"
 
     @classmethod
     def value_of(cls, value: str) -> "AppMode":
@@ -62,8 +70,8 @@ class IconType(Enum):
     IMAGE = "image"
     EMOJI = "emoji"
 
-# cdg: 定义App模型，application应用信息表
-class App(db.Model):  # type: ignore[name-defined]
+
+class App(Base):
     __tablename__ = "apps"
     __table_args__ = (db.PrimaryKeyConstraint("id", name="app_pkey"), db.Index("app_tenant_id_idx", "tenant_id"))
 
@@ -71,7 +79,7 @@ class App(db.Model):  # type: ignore[name-defined]
     tenant_id: Mapped[str] = db.Column(StringUUID, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=False, server_default=db.text("''::character varying"))
-    mode = db.Column(db.String(255), nullable=False)
+    mode: Mapped[str] = mapped_column(db.String(255), nullable=False)
     icon_type = db.Column(db.String(255), nullable=True)  # image, emoji
     icon = db.Column(db.String(255))
     icon_background = db.Column(db.String(255))
@@ -103,7 +111,7 @@ class App(db.Model):  # type: ignore[name-defined]
                 return app_model_config.pre_prompt
             else:
                 return ""
-    # cdg: 定义site模型，site站点信息表，用于存储站点信息，包括站点名称、站点描述、站点URL等。
+
     @property
     def site(self):
         site = db.session.query(Site).filter(Site.app_id == self.id).first()
@@ -141,7 +149,8 @@ class App(db.Model):  # type: ignore[name-defined]
             return False
         if not app_model_config.agent_mode:
             return False
-        if self.app_model_config.agent_mode_dict.get("enabled", False) and self.app_model_config.agent_mode_dict.get(
+
+        if app_model_config.agent_mode_dict.get("enabled", False) and app_model_config.agent_mode_dict.get(
             "strategy", ""
         ) in {"function_call", "react"}:
             self.mode = AppMode.AGENT_CHAT.value
@@ -156,50 +165,116 @@ class App(db.Model):  # type: ignore[name-defined]
 
         return str(self.mode)
 
-    # cdg: 定义deleted_tools属性，用于获取已删除的工具。
     @property
     def deleted_tools(self) -> list:
+        from core.tools.tool_manager import ToolManager
+        from services.plugin.plugin_service import PluginService
+
         # get agent mode tools
         app_model_config = self.app_model_config
         if not app_model_config:
             return []
+
         if not app_model_config.agent_mode:
             return []
+
         agent_mode = app_model_config.agent_mode_dict
         tools = agent_mode.get("tools", [])
 
-        provider_ids = []
+        api_provider_ids: list[str] = []
+        builtin_provider_ids: list[GenericProviderID] = []
 
         for tool in tools:
             keys = list(tool.keys())
             if len(keys) >= 4:
                 provider_type = tool.get("provider_type", "")
                 provider_id = tool.get("provider_id", "")
-                if provider_type == "api":
-                    # check if provider id is a uuid string, if not, skip
+                if provider_type == ToolProviderType.API.value:
                     try:
                         uuid.UUID(provider_id)
                     except Exception:
                         continue
-                    provider_ids.append(provider_id)
+                    api_provider_ids.append(provider_id)
+                if provider_type == ToolProviderType.BUILT_IN.value:
+                    try:
+                        # check if it's hardcoded
+                        try:
+                            ToolManager.get_hardcoded_provider(provider_id)
+                            is_hardcoded = True
+                        except Exception:
+                            is_hardcoded = False
 
-        if not provider_ids:
+                        provider_id = GenericProviderID(provider_id, is_hardcoded)
+                    except Exception:
+                        continue
+
+                    builtin_provider_ids.append(provider_id)
+
+        if not api_provider_ids and not builtin_provider_ids:
             return []
 
-        api_providers = db.session.execute(
-            text("SELECT id FROM tool_api_providers WHERE id IN :provider_ids"), {"provider_ids": tuple(provider_ids)}
-        ).fetchall()
+        with Session(db.engine) as session:
+            if api_provider_ids:
+                existing_api_providers = [
+                    api_provider.id
+                    for api_provider in session.execute(
+                        text("SELECT id FROM tool_api_providers WHERE id IN :provider_ids"),
+                        {"provider_ids": tuple(api_provider_ids)},
+                    ).fetchall()
+                ]
+            else:
+                existing_api_providers = []
+
+        if builtin_provider_ids:
+            # get the non-hardcoded builtin providers
+            non_hardcoded_builtin_providers = [
+                provider_id for provider_id in builtin_provider_ids if not provider_id.is_hardcoded
+            ]
+            if non_hardcoded_builtin_providers:
+                existence = list(PluginService.check_tools_existence(self.tenant_id, non_hardcoded_builtin_providers))
+            else:
+                existence = []
+            # add the hardcoded builtin providers
+            existence.extend([True] * (len(builtin_provider_ids) - len(non_hardcoded_builtin_providers)))
+            builtin_provider_ids = non_hardcoded_builtin_providers + [
+                provider_id for provider_id in builtin_provider_ids if provider_id.is_hardcoded
+            ]
+        else:
+            existence = []
+
+        existing_builtin_providers = {
+            provider_id.provider_name: existence[i] for i, provider_id in enumerate(builtin_provider_ids)
+        }
 
         deleted_tools = []
-        current_api_provider_ids = [str(api_provider.id) for api_provider in api_providers]
 
         for tool in tools:
             keys = list(tool.keys())
             if len(keys) >= 4:
                 provider_type = tool.get("provider_type", "")
                 provider_id = tool.get("provider_id", "")
-                if provider_type == "api" and provider_id not in current_api_provider_ids:
-                    deleted_tools.append(tool["tool_name"])
+
+                if provider_type == ToolProviderType.API.value:
+                    if uuid.UUID(provider_id) not in existing_api_providers:
+                        deleted_tools.append(
+                            {
+                                "type": ToolProviderType.API.value,
+                                "tool_name": tool["tool_name"],
+                                "provider_id": provider_id,
+                            }
+                        )
+
+                if provider_type == ToolProviderType.BUILT_IN.value:
+                    generic_provider_id = GenericProviderID(provider_id)
+
+                    if not existing_builtin_providers[generic_provider_id.provider_name]:
+                        deleted_tools.append(
+                            {
+                                "type": ToolProviderType.BUILT_IN.value,
+                                "tool_name": tool["tool_name"],
+                                "provider_id": provider_id,  # use the original one
+                            }
+                        )
 
         return deleted_tools
 
@@ -219,8 +294,17 @@ class App(db.Model):  # type: ignore[name-defined]
 
         return tags or []
 
+    @property
+    def author_name(self):
+        if self.created_by:
+            account = db.session.query(Account).filter(Account.id == self.created_by).first()
+            if account:
+                return account.name
 
-class AppModelConfig(db.Model):  # type: ignore[name-defined]
+        return None
+
+
+class AppModelConfig(Base):
     __tablename__ = "app_model_configs"
     __table_args__ = (db.PrimaryKeyConstraint("id", name="app_model_config_pkey"), db.Index("app_app_id_idx", "app_id"))
 
@@ -262,12 +346,10 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
     def model_dict(self) -> dict:
         return json.loads(self.model) if self.model else {}
 
-    # cdg: 定义suggested_questions_list属性，用于获取建议问题列表。
     @property
     def suggested_questions_list(self) -> list:
         return json.loads(self.suggested_questions) if self.suggested_questions else []
 
-    # cdg: 定义suggested_questions_after_answer_dict属性，用于获取建议问题列表。
     @property
     def suggested_questions_after_answer_dict(self) -> dict:
         return (
@@ -295,6 +377,9 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
         )
         if annotation_setting:
             collection_binding_detail = annotation_setting.collection_binding_detail
+            if not collection_binding_detail:
+                raise ValueError("Collection binding detail not found")
+
             return {
                 "id": annotation_setting.id,
                 "enabled": True,
@@ -308,7 +393,6 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
         else:
             return {"enabled": False}
 
-    # cdg: 定义more_like_this_dict属性，用于获取相似问题列表。
     @property
     def more_like_this_dict(self) -> dict:
         return json.loads(self.more_like_this) if self.more_like_this else {"enabled": False}
@@ -326,7 +410,7 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
         return json.loads(self.external_data_tools) if self.external_data_tools else []
 
     @property
-    def user_input_form_list(self) -> list[dict]:
+    def user_input_form_list(self):
         return json.loads(self.user_input_form) if self.user_input_form else []
 
     @property
@@ -365,7 +449,7 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
             else {
                 "image": {
                     "enabled": False,
-                    "number_limits": 3,
+                    "number_limits": DEFAULT_FILE_NUMBER_LIMITS,
                     "detail": "high",
                     "transfer_methods": ["remote_url", "local_file"],
                 }
@@ -469,8 +553,8 @@ class AppModelConfig(db.Model):  # type: ignore[name-defined]
 
         return new_app_model_config
 
-# cdg: 定义RecommendedApp模型，推荐应用信息表，用于存储推荐应用信息，包括应用ID、应用描述、应用版权、应用隐私政策、应用分类、应用位置、应用是否列出、应用安装数量、应用语言、应用创建时间、应用更新时间。
-class RecommendedApp(db.Model):  # type: ignore[name-defined]
+
+class RecommendedApp(Base):
     __tablename__ = "recommended_apps"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="recommended_app_pkey"),
@@ -498,7 +582,7 @@ class RecommendedApp(db.Model):  # type: ignore[name-defined]
         return app
 
 
-class InstalledApp(db.Model):  # type: ignore[name-defined]
+class InstalledApp(Base):
     __tablename__ = "installed_apps"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="installed_app_pkey"),
@@ -526,8 +610,16 @@ class InstalledApp(db.Model):  # type: ignore[name-defined]
         tenant = db.session.query(Tenant).filter(Tenant.id == self.tenant_id).first()
         return tenant
 
-# cdg: 定义Conversation模型，会话信息表，用于存储会话信息，包括会话ID、应用ID、应用模型配置ID、模型提供者、覆盖模型配置、模型ID、模式、名称、摘要、输入、介绍、系统指令、系统指令令牌数、状态、调用来源、调用结束用户ID、调用账户ID、阅读时间、阅读账户ID、对话次数、创建时间、更新时间。
-class Conversation(db.Model):  # type: ignore[name-defined]
+
+class ConversationSource(StrEnum):
+    """This enumeration is designed for use with `Conversation.from_source`."""
+
+    # NOTE(QuantumGhost): The enumeration members may not cover all possible cases.
+    API = "api"
+    CONSOLE = "console"
+
+
+class Conversation(Base):
     __tablename__ = "conversations"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="conversation_pkey"),
@@ -548,7 +640,14 @@ class Conversation(db.Model):  # type: ignore[name-defined]
     system_instruction = db.Column(db.Text)
     system_instruction_tokens = db.Column(db.Integer, nullable=False, server_default=db.text("0"))
     status = db.Column(db.String(255), nullable=False)
+
+    # The `invoke_from` records how the conversation is created.
+    #
+    # Its value corresponds to the members of `InvokeFrom`.
+    # (api/core/app/entities/app_invoke_entities.py)
     invoke_from = db.Column(db.String(255), nullable=True)
+
+    # ref: ConversationSource.
     from_source = db.Column(db.String(255), nullable=False)
     from_end_user_id = db.Column(StringUUID)
     from_account_id = db.Column(StringUUID)
@@ -577,7 +676,7 @@ class Conversation(db.Model):  # type: ignore[name-defined]
             if isinstance(value, dict) and value.get("dify_model_identity") == FILE_MODEL_IDENTITY:
                 if value["transfer_method"] == FileTransferMethod.TOOL_FILE:
                     value["tool_file_id"] = value["related_id"]
-                elif value["transfer_method"] == FileTransferMethod.LOCAL_FILE:
+                elif value["transfer_method"] in [FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL]:
                     value["upload_file_id"] = value["related_id"]
                 inputs[key] = file_factory.build_from_mapping(mapping=value, tenant_id=value["tenant_id"])
             elif isinstance(value, list) and all(
@@ -587,7 +686,7 @@ class Conversation(db.Model):  # type: ignore[name-defined]
                 for item in value:
                     if item["transfer_method"] == FileTransferMethod.TOOL_FILE:
                         item["tool_file_id"] = item["related_id"]
-                    elif item["transfer_method"] == FileTransferMethod.LOCAL_FILE:
+                    elif item["transfer_method"] in [FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL]:
                         item["upload_file_id"] = item["related_id"]
                     inputs[key].append(file_factory.build_from_mapping(mapping=item, tenant_id=item["tenant_id"]))
 
@@ -619,7 +718,6 @@ class Conversation(db.Model):  # type: ignore[name-defined]
                 if "model" in override_model_configs:
                     app_model_config = AppModelConfig()
                     app_model_config = app_model_config.from_model_config_dict(override_model_configs)
-                    assert app_model_config is not None, "app model config not found"
                     model_config = app_model_config.to_dict()
                 else:
                     model_config["configs"] = override_model_configs
@@ -710,22 +808,22 @@ class Conversation(db.Model):  # type: ignore[name-defined]
     def status_count(self):
         messages = db.session.query(Message).filter(Message.conversation_id == self.id).all()
         status_counts = {
-            WorkflowRunStatus.RUNNING: 0,
-            WorkflowRunStatus.SUCCEEDED: 0,
-            WorkflowRunStatus.FAILED: 0,
-            WorkflowRunStatus.STOPPED: 0,
-            WorkflowRunStatus.PARTIAL_SUCCESSED: 0,
+            WorkflowExecutionStatus.RUNNING: 0,
+            WorkflowExecutionStatus.SUCCEEDED: 0,
+            WorkflowExecutionStatus.FAILED: 0,
+            WorkflowExecutionStatus.STOPPED: 0,
+            WorkflowExecutionStatus.PARTIAL_SUCCEEDED: 0,
         }
 
         for message in messages:
             if message.workflow_run:
-                status_counts[message.workflow_run.status] += 1
+                status_counts[WorkflowExecutionStatus(message.workflow_run.status)] += 1
 
         return (
             {
-                "success": status_counts[WorkflowRunStatus.SUCCEEDED],
-                "failed": status_counts[WorkflowRunStatus.FAILED],
-                "partial_success": status_counts[WorkflowRunStatus.PARTIAL_SUCCESSED],
+                "success": status_counts[WorkflowExecutionStatus.SUCCEEDED],
+                "failed": status_counts[WorkflowExecutionStatus.FAILED],
+                "partial_success": status_counts[WorkflowExecutionStatus.PARTIAL_SUCCEEDED],
             }
             if messages
             else None
@@ -733,7 +831,12 @@ class Conversation(db.Model):  # type: ignore[name-defined]
 
     @property
     def first_message(self):
-        return db.session.query(Message).filter(Message.conversation_id == self.id).first()
+        return (
+            db.session.query(Message)
+            .filter(Message.conversation_id == self.id)
+            .order_by(Message.created_at.asc())
+            .first()
+        )
 
     @property
     def app(self):
@@ -761,17 +864,44 @@ class Conversation(db.Model):  # type: ignore[name-defined]
     def in_debug_mode(self):
         return self.override_model_configs is not None
 
-# cdg: 定义Message模型，消息信息表，用于存储消息信息，包括消息ID、应用ID、模型提供者、模型ID、覆盖模型配置、会话ID、输入、查询、消息、消息令牌数、消息单价、消息总价、货币、状态、错误、消息元数据、调用来源、调用结束用户ID、调用账户ID、创建时间、更新时间、是否为智能体模式、工作流运行ID。
-class Message(db.Model):  # type: ignore[name-defined]
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "app_id": self.app_id,
+            "app_model_config_id": self.app_model_config_id,
+            "model_provider": self.model_provider,
+            "override_model_configs": self.override_model_configs,
+            "model_id": self.model_id,
+            "mode": self.mode,
+            "name": self.name,
+            "summary": self.summary,
+            "inputs": self.inputs,
+            "introduction": self.introduction,
+            "system_instruction": self.system_instruction,
+            "system_instruction_tokens": self.system_instruction_tokens,
+            "status": self.status,
+            "invoke_from": self.invoke_from,
+            "from_source": self.from_source,
+            "from_end_user_id": self.from_end_user_id,
+            "from_account_id": self.from_account_id,
+            "read_at": self.read_at,
+            "read_account_id": self.read_account_id,
+            "dialogue_count": self.dialogue_count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
-        db.PrimaryKeyConstraint("id", name="message_pkey"),
-        db.Index("message_app_id_idx", "app_id", "created_at"),
-        db.Index("message_conversation_id_idx", "conversation_id"),
-        db.Index("message_end_user_idx", "app_id", "from_source", "from_end_user_id"),
-        db.Index("message_account_idx", "app_id", "from_source", "from_account_id"),
-        db.Index("message_workflow_run_id_idx", "conversation_id", "workflow_run_id"),
-        db.Index("message_created_at_idx", "created_at"),
+        PrimaryKeyConstraint("id", name="message_pkey"),
+        Index("message_app_id_idx", "app_id", "created_at"),
+        Index("message_conversation_id_idx", "conversation_id"),
+        Index("message_end_user_idx", "app_id", "from_source", "from_end_user_id"),
+        Index("message_account_idx", "app_id", "from_source", "from_account_id"),
+        Index("message_workflow_run_id_idx", "conversation_id", "workflow_run_id"),
+        Index("message_created_at_idx", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(StringUUID, server_default=db.text("uuid_generate_v4()"))
@@ -783,11 +913,11 @@ class Message(db.Model):  # type: ignore[name-defined]
     _inputs: Mapped[dict] = mapped_column("inputs", db.JSON)
     query: Mapped[str] = db.Column(db.Text, nullable=False)
     message = db.Column(db.JSON, nullable=False)
-    message_tokens = db.Column(db.Integer, nullable=False, server_default=db.text("0"))
+    message_tokens: Mapped[int] = db.Column(db.Integer, nullable=False, server_default=db.text("0"))
     message_unit_price = db.Column(db.Numeric(10, 4), nullable=False)
     message_price_unit = db.Column(db.Numeric(10, 7), nullable=False, server_default=db.text("0.001"))
     answer: Mapped[str] = db.Column(db.Text, nullable=False)
-    answer_tokens = db.Column(db.Integer, nullable=False, server_default=db.text("0"))
+    answer_tokens: Mapped[int] = db.Column(db.Integer, nullable=False, server_default=db.text("0"))
     answer_unit_price = db.Column(db.Numeric(10, 4), nullable=False)
     answer_price_unit = db.Column(db.Numeric(10, 7), nullable=False, server_default=db.text("0.001"))
     parent_message_id = db.Column(StringUUID, nullable=True)
@@ -816,7 +946,7 @@ class Message(db.Model):  # type: ignore[name-defined]
             if isinstance(value, dict) and value.get("dify_model_identity") == FILE_MODEL_IDENTITY:
                 if value["transfer_method"] == FileTransferMethod.TOOL_FILE:
                     value["tool_file_id"] = value["related_id"]
-                elif value["transfer_method"] == FileTransferMethod.LOCAL_FILE:
+                elif value["transfer_method"] in [FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL]:
                     value["upload_file_id"] = value["related_id"]
                 inputs[key] = file_factory.build_from_mapping(mapping=value, tenant_id=value["tenant_id"])
             elif isinstance(value, list) and all(
@@ -826,7 +956,7 @@ class Message(db.Model):  # type: ignore[name-defined]
                 for item in value:
                     if item["transfer_method"] == FileTransferMethod.TOOL_FILE:
                         item["tool_file_id"] = item["related_id"]
-                    elif item["transfer_method"] == FileTransferMethod.LOCAL_FILE:
+                    elif item["transfer_method"] in [FileTransferMethod.LOCAL_FILE, FileTransferMethod.REMOTE_URL]:
                         item["upload_file_id"] = item["related_id"]
                     inputs[key].append(file_factory.build_from_mapping(mapping=item, tenant_id=item["tenant_id"]))
         return inputs
@@ -884,9 +1014,7 @@ class Message(db.Model):  # type: ignore[name-defined]
                 if not tool_file_id:
                     continue
 
-                sign_url = ToolFileParser.get_tool_file_manager().sign_file(
-                    tool_file_id=tool_file_id, extension=extension
-                )
+                sign_url = sign_tool_file(tool_file_id=tool_file_id, extension=extension)
             elif "file-preview" in url:
                 # get upload file id
                 upload_file_id_pattern = r"\/files\/([\w-]+)\/file-preview?\?timestamp="
@@ -910,7 +1038,9 @@ class Message(db.Model):  # type: ignore[name-defined]
                 sign_url = file_helpers.get_signed_file_url(upload_file_id)
             else:
                 continue
-
+            # if as_attachment is in the url, add it to the sign_url.
+            if "as_attachment" in url:
+                sign_url += "&as_attachment=true"
             re_sign_file_url_answer = re_sign_file_url_answer.replace(url, sign_url)
 
         return re_sign_file_url_answer
@@ -986,12 +1116,7 @@ class Message(db.Model):  # type: ignore[name-defined]
 
     @property
     def retriever_resources(self):
-        return (
-            db.session.query(DatasetRetrieverResource)
-            .filter(DatasetRetrieverResource.message_id == self.id)
-            .order_by(DatasetRetrieverResource.position.asc())
-            .all()
-        )
+        return self.message_metadata_dict.get("retriever_resources") if self.message_metadata else []
 
     @property
     def message_files(self):
@@ -1004,19 +1129,19 @@ class Message(db.Model):  # type: ignore[name-defined]
 
         files = []
         for message_file in message_files:
-            if message_file.transfer_method == "local_file":
+            if message_file.transfer_method == FileTransferMethod.LOCAL_FILE.value:
                 if message_file.upload_file_id is None:
                     raise ValueError(f"MessageFile {message_file.id} is a local file but has no upload_file_id")
                 file = file_factory.build_from_mapping(
                     mapping={
                         "id": message_file.id,
-                        "upload_file_id": message_file.upload_file_id,
-                        "transfer_method": message_file.transfer_method,
                         "type": message_file.type,
+                        "transfer_method": message_file.transfer_method,
+                        "upload_file_id": message_file.upload_file_id,
                     },
                     tenant_id=current_app.tenant_id,
                 )
-            elif message_file.transfer_method == "remote_url":
+            elif message_file.transfer_method == FileTransferMethod.REMOTE_URL.value:
                 if message_file.url is None:
                     raise ValueError(f"MessageFile {message_file.id} is a remote url but has no url")
                 file = file_factory.build_from_mapping(
@@ -1024,11 +1149,12 @@ class Message(db.Model):  # type: ignore[name-defined]
                         "id": message_file.id,
                         "type": message_file.type,
                         "transfer_method": message_file.transfer_method,
+                        "upload_file_id": message_file.upload_file_id,
                         "url": message_file.url,
                     },
                     tenant_id=current_app.tenant_id,
                 )
-            elif message_file.transfer_method == "tool_file":
+            elif message_file.transfer_method == FileTransferMethod.TOOL_FILE.value:
                 if message_file.upload_file_id is None:
                     assert message_file.url is not None
                     message_file.upload_file_id = message_file.url.split("/")[-1].split(".")[0]
@@ -1049,14 +1175,13 @@ class Message(db.Model):  # type: ignore[name-defined]
             files.append(file)
 
         result = [
-            {"belongs_to": message_file.belongs_to, **file.to_dict()}
+            {"belongs_to": message_file.belongs_to, "upload_file_id": message_file.upload_file_id, **file.to_dict()}
             for (file, message_file) in zip(files, message_files)
         ]
 
         db.session.commit()
         return result
 
-    # cdg: 定义workflow_run属性，用于获取工作流运行信息。
     @property
     def workflow_run(self):
         if self.workflow_run_id:
@@ -1071,8 +1196,10 @@ class Message(db.Model):  # type: ignore[name-defined]
             "id": self.id,
             "app_id": self.app_id,
             "conversation_id": self.conversation_id,
+            "model_id": self.model_id,
             "inputs": self.inputs,
             "query": self.query,
+            "total_price": self.total_price,
             "message": self.message,
             "answer": self.answer,
             "status": self.status,
@@ -1093,7 +1220,9 @@ class Message(db.Model):  # type: ignore[name-defined]
             id=data["id"],
             app_id=data["app_id"],
             conversation_id=data["conversation_id"],
+            model_id=data["model_id"],
             inputs=data["inputs"],
+            total_price=data["total_price"],
             query=data["query"],
             message=data["message"],
             answer=data["answer"],
@@ -1110,8 +1239,7 @@ class Message(db.Model):  # type: ignore[name-defined]
         )
 
 
-# cdg: 定义MessageFeedback模型，消息反馈信息表，用于点赞点踩场景
-class MessageFeedback(db.Model):  # type: ignore[name-defined]
+class MessageFeedback(Base):
     __tablename__ = "message_feedbacks"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="message_feedback_pkey"),
@@ -1137,8 +1265,23 @@ class MessageFeedback(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.from_account_id).first()
         return account
 
-# cdg: 定义MessageFile模型，消息文件信息表，用于存储消息文件信息，包括文件ID、消息ID、文件类型、文件传输方式、文件URL、文件归属、文件上传ID、创建者角色、创建者ID、创建时间。
-class MessageFile(db.Model):  # type: ignore[name-defined]
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "app_id": str(self.app_id),
+            "conversation_id": str(self.conversation_id),
+            "message_id": str(self.message_id),
+            "rating": self.rating,
+            "content": self.content,
+            "from_source": self.from_source,
+            "from_end_user_id": str(self.from_end_user_id) if self.from_end_user_id else None,
+            "from_account_id": str(self.from_account_id) if self.from_account_id else None,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+        }
+
+
+class MessageFile(Base):
     __tablename__ = "message_files"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="message_file_pkey"),
@@ -1155,7 +1298,7 @@ class MessageFile(db.Model):  # type: ignore[name-defined]
         url: str | None = None,
         belongs_to: Literal["user", "assistant"] | None = None,
         upload_file_id: str | None = None,
-        created_by_role: CreatedByRole,
+        created_by_role: CreatorUserRole,
         created_by: str,
     ):
         self.message_id = message_id
@@ -1178,8 +1321,8 @@ class MessageFile(db.Model):  # type: ignore[name-defined]
     created_by: Mapped[str] = db.Column(StringUUID, nullable=False)
     created_at: Mapped[datetime] = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义MessageAnnotation模型，消息注释信息表，用于存储消息注释信息，包括注释ID、应用ID、会话ID、消息ID、问题、内容、命中次数、账户ID、创建时间、更新时间。
-class MessageAnnotation(db.Model):  # type: ignore[name-defined]
+
+class MessageAnnotation(Base):
     __tablename__ = "message_annotations"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="message_annotation_pkey"),
@@ -1209,8 +1352,8 @@ class MessageAnnotation(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.account_id).first()
         return account
 
-# cdg: 定义AppAnnotationHitHistory模型，应用注释命中历史信息表，用于存储应用注释命中历史信息，包括命中历史ID、应用ID、注释ID、来源、问题、账户ID、创建时间、得分、消息ID、注释问题、注释内容。
-class AppAnnotationHitHistory(db.Model):  # type: ignore[name-defined]
+
+class AppAnnotationHitHistory(Base):
     __tablename__ = "app_annotation_hit_histories"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="app_annotation_hit_histories_pkey"),
@@ -1222,7 +1365,7 @@ class AppAnnotationHitHistory(db.Model):  # type: ignore[name-defined]
 
     id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
     app_id = db.Column(StringUUID, nullable=False)
-    annotation_id = db.Column(StringUUID, nullable=False)
+    annotation_id: Mapped[str] = db.Column(StringUUID, nullable=False)
     source = db.Column(db.Text, nullable=False)
     question = db.Column(db.Text, nullable=False)
     account_id = db.Column(StringUUID, nullable=False)
@@ -1247,8 +1390,8 @@ class AppAnnotationHitHistory(db.Model):  # type: ignore[name-defined]
         account = db.session.query(Account).filter(Account.id == self.account_id).first()
         return account
 
-# cdg: 定义AppAnnotationSetting模型，应用注释设置信息表，用于存储应用注释设置信息，包括设置ID、应用ID、得分阈值、数据集绑定ID、创建者ID、创建时间、更新者ID、更新时间。
-class AppAnnotationSetting(db.Model):  # type: ignore[name-defined]
+
+class AppAnnotationSetting(Base):
     __tablename__ = "app_annotation_settings"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="app_annotation_settings_pkey"),
@@ -1265,26 +1408,6 @@ class AppAnnotationSetting(db.Model):  # type: ignore[name-defined]
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
     @property
-    def created_account(self):
-        account = (
-            db.session.query(Account)
-            .join(AppAnnotationSetting, AppAnnotationSetting.created_user_id == Account.id)
-            .filter(AppAnnotationSetting.id == self.annotation_id)
-            .first()
-        )
-        return account
-
-    @property
-    def updated_account(self):
-        account = (
-            db.session.query(Account)
-            .join(AppAnnotationSetting, AppAnnotationSetting.updated_user_id == Account.id)
-            .filter(AppAnnotationSetting.id == self.annotation_id)
-            .first()
-        )
-        return account
-
-    @property
     def collection_binding_detail(self):
         from .dataset import DatasetCollectionBinding
 
@@ -1296,7 +1419,7 @@ class AppAnnotationSetting(db.Model):  # type: ignore[name-defined]
         return collection_binding_detail
 
 
-class OperationLog(db.Model):  # type: ignore[name-defined]
+class OperationLog(Base):
     __tablename__ = "operation_logs"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="operation_log_pkey"),
@@ -1312,8 +1435,8 @@ class OperationLog(db.Model):  # type: ignore[name-defined]
     created_ip = db.Column(db.String(255), nullable=False)
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义EndUser模型，终端用户信息表，用于存储终端用户信息，包括用户ID、租户ID、应用ID、用户类型、外部用户ID、用户名称、是否匿名、会话ID、创建时间、更新时间。
-class EndUser(UserMixin, db.Model):  # type: ignore[name-defined]
+
+class EndUser(Base, UserMixin):
     __tablename__ = "end_users"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="end_user_pkey"),
@@ -1322,7 +1445,7 @@ class EndUser(UserMixin, db.Model):  # type: ignore[name-defined]
     )
 
     id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
-    tenant_id = db.Column(StringUUID, nullable=False)
+    tenant_id: Mapped[str] = db.Column(StringUUID, nullable=False)
     app_id = db.Column(StringUUID, nullable=True)
     type = db.Column(db.String(255), nullable=False)
     external_user_id = db.Column(db.String(255), nullable=True)
@@ -1332,8 +1455,41 @@ class EndUser(UserMixin, db.Model):  # type: ignore[name-defined]
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义Site模型，站点信息表，用于存储站点信息，包括站点ID、应用ID、站点名称、图标类型、图标、图标背景、站点描述、默认语言、聊天颜色主题、聊天颜色主题反转、版权、隐私政策、是否显示工作流步骤、是否使用图标作为答案图标、自定义免责声明、自定义域、自定义令牌策略、是否公开提示、状态、创建者ID、创建时间、更新者ID、更新时间、站点代码。
-class Site(db.Model):  # type: ignore[name-defined]
+
+class AppMCPServer(Base):
+    __tablename__ = "app_mcp_servers"
+    __table_args__ = (
+        db.PrimaryKeyConstraint("id", name="app_mcp_server_pkey"),
+        db.UniqueConstraint("tenant_id", "app_id", name="unique_app_mcp_server_tenant_app_id"),
+        db.UniqueConstraint("server_code", name="unique_app_mcp_server_server_code"),
+    )
+    id = db.Column(StringUUID, server_default=db.text("uuid_generate_v4()"))
+    tenant_id = db.Column(StringUUID, nullable=False)
+    app_id = db.Column(StringUUID, nullable=False)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.String(255), nullable=False)
+    server_code = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(255), nullable=False, server_default=db.text("'normal'::character varying"))
+    parameters = db.Column(db.Text, nullable=False)
+
+    created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+    updated_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
+
+    @staticmethod
+    def generate_server_code(n):
+        while True:
+            result = generate_string(n)
+            while db.session.query(AppMCPServer).filter(AppMCPServer.server_code == result).count() > 0:
+                result = generate_string(n)
+
+            return result
+
+    @property
+    def parameters_dict(self) -> dict[str, Any]:
+        return cast(dict[str, Any], json.loads(self.parameters))
+
+
+class Site(Base):
     __tablename__ = "sites"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="site_pkey"),
@@ -1389,8 +1545,8 @@ class Site(db.Model):  # type: ignore[name-defined]
     def app_base_url(self):
         return dify_config.APP_WEB_URL or request.url_root.rstrip("/")
 
-# cdg: 定义ApiToken模型，API令牌信息表，用于存储API令牌信息，包括令牌ID、应用ID、租户ID、令牌类型、令牌、最后使用时间、创建时间。
-class ApiToken(db.Model):  # type: ignore[name-defined]
+
+class ApiToken(Base):
     __tablename__ = "api_tokens"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="api_token_pkey"),
@@ -1415,8 +1571,8 @@ class ApiToken(db.Model):  # type: ignore[name-defined]
                 continue
             return result
 
-# cdg: 定义UploadFile模型，上传文件信息表，用于存储上传文件信息，包括文件ID、租户ID、存储类型、文件键、文件名、文件大小、文件扩展名、文件MIME类型、创建者角色、创建者ID、创建时间、是否使用、使用者ID、使用时间、文件哈希、源URL。
-class UploadFile(db.Model):  # type: ignore[name-defined]
+
+class UploadFile(Base):
     __tablename__ = "upload_files"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="upload_file_pkey"),
@@ -1452,7 +1608,7 @@ class UploadFile(db.Model):  # type: ignore[name-defined]
         size: int,
         extension: str,
         mime_type: str,
-        created_by_role: CreatedByRole,
+        created_by_role: CreatorUserRole,
         created_by: str,
         created_at: datetime,
         used: bool,
@@ -1477,8 +1633,8 @@ class UploadFile(db.Model):  # type: ignore[name-defined]
         self.hash = hash
         self.source_url = source_url
 
-# cdg: 定义ApiRequest模型，API请求信息表，用于存储API请求信息，包括请求ID、租户ID、API令牌ID、请求路径、请求内容、响应内容、IP地址、创建时间。  
-class ApiRequest(db.Model):  # type: ignore[name-defined]
+
+class ApiRequest(Base):
     __tablename__ = "api_requests"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="api_request_pkey"),
@@ -1494,8 +1650,8 @@ class ApiRequest(db.Model):  # type: ignore[name-defined]
     ip = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义MessageChain模型，消息链信息表，用于存储消息链信息，包括消息链ID、消息ID、消息类型、输入、输出、创建时间。
-class MessageChain(db.Model):  # type: ignore[name-defined]
+
+class MessageChain(Base):
     __tablename__ = "message_chains"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="message_chain_pkey"),
@@ -1509,8 +1665,8 @@ class MessageChain(db.Model):  # type: ignore[name-defined]
     output = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
 
-# cdg: 定义MessageAgentThought模型，消息智能体思考信息表，用于存储消息智能体思考信息，包括思考ID、消息ID、消息链ID、位置、思考、工具、工具标签、工具元数据、工具输入、观察、插件ID、工具处理数据、消息、消息令牌、消息单价、消息总价、货币、延迟、创建者角色、创建者ID、创建时间。
-class MessageAgentThought(db.Model):  # type: ignore[name-defined]
+
+class MessageAgentThought(Base):
     __tablename__ = "message_agent_thoughts"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="message_agent_thought_pkey"),
@@ -1565,7 +1721,7 @@ class MessageAgentThought(db.Model):  # type: ignore[name-defined]
                 return cast(dict, json.loads(self.tool_labels_str))
             else:
                 return {}
-        except Exception as e:
+        except Exception:
             return {}
 
     @property
@@ -1575,7 +1731,7 @@ class MessageAgentThought(db.Model):  # type: ignore[name-defined]
                 return cast(dict, json.loads(self.tool_meta_str))
             else:
                 return {}
-        except Exception as e:
+        except Exception:
             return {}
 
     @property
@@ -1596,11 +1752,11 @@ class MessageAgentThought(db.Model):  # type: ignore[name-defined]
                 return result
             else:
                 return {tool: {} for tool in tools}
-        except Exception as e:
+        except Exception:
             return {}
 
     @property
-    def tool_outputs_dict(self) -> dict:
+    def tool_outputs_dict(self):
         tools = self.tools
         try:
             if self.observation:
@@ -1617,14 +1773,14 @@ class MessageAgentThought(db.Model):  # type: ignore[name-defined]
                 return result
             else:
                 return {tool: {} for tool in tools}
-        except Exception as e:
+        except Exception:
             if self.observation:
                 return dict.fromkeys(tools, self.observation)
             else:
                 return {}
 
-# cdg: 定义DatasetRetrieverResource模型，数据集检索资源信息表，用于存储数据集检索资源信息，包括资源ID、消息ID、位置、数据集ID、数据集名称、文档ID、文档名称、数据源类型、段落ID、得分、内容、命中次数、字数、段落位置、索引节点哈希、检索来源、检索者ID、检索时间。# 
-class DatasetRetrieverResource(db.Model):  # type: ignore[name-defined]
+
+class DatasetRetrieverResource(Base):
     __tablename__ = "dataset_retriever_resources"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="dataset_retriever_resource_pkey"),
@@ -1650,8 +1806,8 @@ class DatasetRetrieverResource(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=db.func.current_timestamp())
 
-# cdg: 定义Tag模型，标签信息表，用于存储标签信息，包括标签ID、租户ID、标签类型、标签名称、创建者ID、创建时间。
-class Tag(db.Model):  # type: ignore[name-defined]
+
+class Tag(Base):
     __tablename__ = "tags"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="tag_pkey"),
@@ -1668,8 +1824,8 @@ class Tag(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义TagBinding模型，标签绑定信息表，用于存储标签绑定信息，包括绑定ID、租户ID、标签ID、目标ID、创建者ID、创建时间。
-class TagBinding(db.Model):  # type: ignore[name-defined]
+
+class TagBinding(Base):
     __tablename__ = "tag_bindings"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="tag_binding_pkey"),
@@ -1684,8 +1840,8 @@ class TagBinding(db.Model):  # type: ignore[name-defined]
     created_by = db.Column(StringUUID, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, server_default=func.current_timestamp())
 
-# cdg: 定义TraceAppConfig模型，跟踪应用配置信息表，用于存储跟踪应用配置信息，包括配置ID、应用ID、跟踪提供者、跟踪配置、创建时间、更新时间、是否激活。
-class TraceAppConfig(db.Model):  # type: ignore[name-defined]
+
+class TraceAppConfig(Base):
     __tablename__ = "trace_app_config"
     __table_args__ = (
         db.PrimaryKeyConstraint("id", name="tracing_app_config_pkey"),

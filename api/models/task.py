@@ -1,12 +1,13 @@
-# cdg: Celery异步任务相关表结构定义，实际上没有用到
 from datetime import UTC, datetime
 
 from celery import states  # type: ignore
 
+from models.base import Base
+
 from .engine import db
 
 
-class CeleryTask(db.Model):  # type: ignore[name-defined]
+class CeleryTask(Base):
     """Task result/status."""
 
     __tablename__ = "celery_taskmeta"
@@ -30,7 +31,7 @@ class CeleryTask(db.Model):  # type: ignore[name-defined]
     queue = db.Column(db.String(155), nullable=True)
 
 
-class CeleryTaskSet(db.Model):  # type: ignore[name-defined]
+class CeleryTaskSet(Base):
     """TaskSet result."""
 
     __tablename__ = "celery_tasksetmeta"

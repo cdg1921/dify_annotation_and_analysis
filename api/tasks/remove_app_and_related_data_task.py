@@ -8,11 +8,12 @@ from sqlalchemy import delete
 from sqlalchemy.exc import SQLAlchemyError
 
 from extensions.ext_database import db
-from models.dataset import AppDatasetJoin
-from models.model import (
+from models import (
     ApiToken,
     AppAnnotationHitHistory,
     AppAnnotationSetting,
+    AppDatasetJoin,
+    AppMCPServer,
     AppModelConfig,
     Conversation,
     EndUser,
@@ -30,7 +31,7 @@ from models.model import (
 )
 from models.tools import WorkflowToolProvider
 from models.web import PinnedConversation, SavedMessage
-from models.workflow import ConversationVariable, Workflow, WorkflowAppLog, WorkflowNodeExecution, WorkflowRun
+from models.workflow import ConversationVariable, Workflow, WorkflowAppLog, WorkflowNodeExecutionModel, WorkflowRun
 
 
 @shared_task(queue="app_deletion", bind=True, max_retries=3)
@@ -41,6 +42,7 @@ def remove_app_and_related_data_task(self, tenant_id: str, app_id: str):
         # Delete related data
         _delete_app_model_configs(tenant_id, app_id)
         _delete_app_site(tenant_id, app_id)
+        _delete_app_mcp_servers(tenant_id, app_id)
         _delete_app_api_tokens(tenant_id, app_id)
         _delete_installed_apps(tenant_id, app_id)
         _delete_recommended_apps(tenant_id, app_id)
@@ -87,6 +89,18 @@ def _delete_app_site(tenant_id: str, app_id: str):
         db.session.query(Site).filter(Site.id == site_id).delete(synchronize_session=False)
 
     _delete_records("""select id from sites where app_id=:app_id limit 1000""", {"app_id": app_id}, del_site, "site")
+
+
+def _delete_app_mcp_servers(tenant_id: str, app_id: str):
+    def del_mcp_server(mcp_server_id: str):
+        db.session.query(AppMCPServer).filter(AppMCPServer.id == mcp_server_id).delete(synchronize_session=False)
+
+    _delete_records(
+        """select id from app_mcp_servers where app_id=:app_id limit 1000""",
+        {"app_id": app_id},
+        del_mcp_server,
+        "app mcp server",
+    )
 
 
 def _delete_app_api_tokens(tenant_id: str, app_id: str):
@@ -188,9 +202,9 @@ def _delete_app_workflow_runs(tenant_id: str, app_id: str):
 
 def _delete_app_workflow_node_executions(tenant_id: str, app_id: str):
     def del_workflow_node_execution(workflow_node_execution_id: str):
-        db.session.query(WorkflowNodeExecution).filter(WorkflowNodeExecution.id == workflow_node_execution_id).delete(
-            synchronize_session=False
-        )
+        db.session.query(WorkflowNodeExecutionModel).filter(
+            WorkflowNodeExecutionModel.id == workflow_node_execution_id
+        ).delete(synchronize_session=False)
 
     _delete_records(
         """select id from workflow_node_executions where tenant_id=:tenant_id and app_id=:app_id limit 1000""",

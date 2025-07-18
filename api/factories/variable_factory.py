@@ -39,14 +39,14 @@ from core.variables.variables import (
 from core.workflow.constants import CONVERSATION_VARIABLE_NODE_ID, ENVIRONMENT_VARIABLE_NODE_ID
 
 
-class InvalidSelectorError(ValueError):
-    pass
-
-
 class UnsupportedSegmentTypeError(Exception):
     pass
 
-# cdg: 定义变量类型到变量类的映射
+
+class TypeMismatchError(Exception):
+    pass
+
+
 # Define the constant
 SEGMENT_TO_VARIABLE_MAP = {
     StringSegment: StringVariable,
@@ -62,21 +62,19 @@ SEGMENT_TO_VARIABLE_MAP = {
     NoneSegment: NoneVariable,
 }
 
-# cdg: 从映射构建对话变量
+
 def build_conversation_variable_from_mapping(mapping: Mapping[str, Any], /) -> Variable:
-    if not mapping.get("name"): # cdg: 如果变量名不存在，则抛出异常
+    if not mapping.get("name"):
         raise VariableError("missing name")
-    # cdg: 从映射构建对话变量
     return _build_variable_from_mapping(mapping=mapping, selector=[CONVERSATION_VARIABLE_NODE_ID, mapping["name"]])
 
-# cdg: 从映射构建环境变量
+
 def build_environment_variable_from_mapping(mapping: Mapping[str, Any], /) -> Variable:
-    if not mapping.get("name"): # cdg: 如果变量名不存在，则抛出异常
+    if not mapping.get("name"):
         raise VariableError("missing name")
-    # cdg: 从映射构建环境变量
     return _build_variable_from_mapping(mapping=mapping, selector=[ENVIRONMENT_VARIABLE_NODE_ID, mapping["name"]])
 
-# cdg: 从映射构建变量
+
 def _build_variable_from_mapping(*, mapping: Mapping[str, Any], selector: Sequence[str]) -> Variable:
     """
     This factory function is used to create the environment variable or the conversation variable,
@@ -86,12 +84,12 @@ def _build_variable_from_mapping(*, mapping: Mapping[str, Any], selector: Sequen
         raise VariableError("missing value type")
     if (value := mapping.get("value")) is None:
         raise VariableError("missing value")
-    # FIXME: using Any here, fix it later # cdg: 使用Any类型，待修复
-    result: Any
+
+    result: Variable
     match value_type:
         case SegmentType.STRING:
             result = StringVariable.model_validate(mapping)
-        case SegmentType.SECR#ET:
+        case SegmentType.SECRET:
             result = SecretVariable.model_validate(mapping)
         case SegmentType.NUMBER if isinstance(value, int):
             result = IntegerVariable.model_validate(mapping)
@@ -115,41 +113,115 @@ def _build_variable_from_mapping(*, mapping: Mapping[str, Any], selector: Sequen
         result = result.model_copy(update={"selector": selector})
     return cast(Variable, result)
 
-# cdg: 构建变量类型对象（一个类型对象Segment包括value_type和value两个属性，value_type表示类型，value表示值）
+
+def infer_segment_type_from_value(value: Any, /) -> SegmentType:
+    return build_segment(value).value_type
+
+
 def build_segment(value: Any, /) -> Segment:
-    if value is None: # cdg: 如果值为空，则返回空段
+    if value is None:
         return NoneSegment()
-    if isinstance(value, str): # cdg: 如果值为字符串，则返回字符串对象  
+    if isinstance(value, str):
         return StringSegment(value=value)
-    if isinstance(value, int): # cdg: 如果值为整数，则返回整数对象
+    if isinstance(value, int):
         return IntegerSegment(value=value)
-    if isinstance(value, float): # cdg: 如果值为浮点数，则返回浮点数对象
+    if isinstance(value, float):
         return FloatSegment(value=value)
-    if isinstance(value, dict): # cdg: 如果值为字典，则返回对象对象
+    if isinstance(value, dict):
         return ObjectSegment(value=value)
-    if isinstance(value, File): # cdg: 如果值为文件，则返回文件对象
+    if isinstance(value, File):
         return FileSegment(value=value)
-    if isinstance(value, list): # cdg: 如果值为列表，则返回数组对象
-        items = [build_segment(item) for item in value] # cdg: 构建列表中的每个元素
-        types = {item.value_type for item in items} # cdg: 获取列表中每个元素的类型
-        if len(types) != 1 or all(isinstance(item, ArraySegment) for item in items): # cdg: 如果列表中每个元素的类型不唯一，或者所有元素都是数组，则返回数组对象
+    if isinstance(value, list):
+        items = [build_segment(item) for item in value]
+        types = {item.value_type for item in items}
+        if len(types) != 1 or all(isinstance(item, ArraySegment) for item in items):
             return ArrayAnySegment(value=value)
-        match types.pop(): # cdg: 根据列表中每个元素的类型，返回不同的数组对象
-            case SegmentType.STRING: # cdg: 如果列表中每个元素的类型为字符串，则返回字符串数组对象
+        match types.pop():
+            case SegmentType.STRING:
                 return ArrayStringSegment(value=value)
-            case SegmentType.NUMBER: # cdg: 如果列表中每个元素的类型为整数，则返回整数数组对象
+            case SegmentType.NUMBER:
                 return ArrayNumberSegment(value=value)
-            case SegmentType.OBJECT: # cdg: 如果列表中每个元素的类型为对象，则返回对象数组对象
+            case SegmentType.OBJECT:
                 return ArrayObjectSegment(value=value)
-            case SegmentType.FILE: # cdg: 如果列表中每个元素的类型为文件，则返回文件数组对象
+            case SegmentType.FILE:
                 return ArrayFileSegment(value=value)
-            case SegmentType.NONE: # cdg: 如果列表中每个元素的类型为空，则返回空数组对象
+            case SegmentType.NONE:
                 return ArrayAnySegment(value=value)
-            case _: # cdg: 如果列表中每个元素的类型为其他类型，则抛出异常
+            case _:
+                # This should be unreachable.
                 raise ValueError(f"not supported value {value}")
     raise ValueError(f"not supported value {value}")
 
-# cdg: 将类型对象转换为变量
+
+def build_segment_with_type(segment_type: SegmentType, value: Any) -> Segment:
+    """
+    Build a segment with explicit type checking.
+
+    This function creates a segment from a value while enforcing type compatibility
+    with the specified segment_type. It provides stricter type validation compared
+    to the standard build_segment function.
+
+    Args:
+        segment_type: The expected SegmentType for the resulting segment
+        value: The value to be converted into a segment
+
+    Returns:
+        Segment: A segment instance of the appropriate type
+
+    Raises:
+        TypeMismatchError: If the value type doesn't match the expected segment_type
+
+    Special Cases:
+        - For empty list [] values, if segment_type is array[*], returns the corresponding array type
+        - Type validation is performed before segment creation
+
+    Examples:
+        >>> build_segment_with_type(SegmentType.STRING, "hello")
+        StringSegment(value="hello")
+
+        >>> build_segment_with_type(SegmentType.ARRAY_STRING, [])
+        ArrayStringSegment(value=[])
+
+        >>> build_segment_with_type(SegmentType.STRING, 123)
+        # Raises TypeMismatchError
+    """
+    # Handle None values
+    if value is None:
+        if segment_type == SegmentType.NONE:
+            return NoneSegment()
+        else:
+            raise TypeMismatchError(f"Expected {segment_type}, but got None")
+
+    # Handle empty list special case for array types
+    if isinstance(value, list) and len(value) == 0:
+        if segment_type == SegmentType.ARRAY_ANY:
+            return ArrayAnySegment(value=value)
+        elif segment_type == SegmentType.ARRAY_STRING:
+            return ArrayStringSegment(value=value)
+        elif segment_type == SegmentType.ARRAY_NUMBER:
+            return ArrayNumberSegment(value=value)
+        elif segment_type == SegmentType.ARRAY_OBJECT:
+            return ArrayObjectSegment(value=value)
+        elif segment_type == SegmentType.ARRAY_FILE:
+            return ArrayFileSegment(value=value)
+        else:
+            raise TypeMismatchError(f"Expected {segment_type}, but got empty list")
+
+    # Build segment using existing logic to infer actual type
+    inferred_segment = build_segment(value)
+    inferred_type = inferred_segment.value_type
+
+    # Type compatibility checking
+    if inferred_type == segment_type:
+        return inferred_segment
+
+    # Type mismatch - raise error with descriptive message
+    raise TypeMismatchError(
+        f"Type mismatch: expected {segment_type}, but value '{value}' "
+        f"(type: {type(value).__name__}) corresponds to {inferred_type}"
+    )
+
+
 def segment_to_variable(
     *,
     segment: Segment,

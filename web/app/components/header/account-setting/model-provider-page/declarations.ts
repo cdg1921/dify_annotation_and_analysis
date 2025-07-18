@@ -1,3 +1,5 @@
+import type { SchemaRoot } from '@/app/components/workflow/nodes/llm/types'
+
 export type FormValue = Record<string, any>
 
 export type TypeWithI18N<T = string> = {
@@ -15,12 +17,20 @@ export enum FormTypeEnum {
   boolean = 'boolean',
   files = 'files',
   file = 'file',
+  modelSelector = 'model-selector',
+  toolSelector = 'tool-selector',
+  multiToolSelector = 'array[tools]',
+  appSelector = 'app-selector',
+  object = 'object',
+  array = 'array',
+  dynamicSelect = 'dynamic-select',
 }
 
 export type FormOption = {
   label: TypeWithI18N
   value: string
   show_on: FormShowOnObject[]
+  icon?: string
 }
 
 export enum ModelTypeEnum {
@@ -51,10 +61,12 @@ export enum ModelFeatureEnum {
   toolCall = 'tool-call',
   multiToolCall = 'multi-tool-call',
   agentThought = 'agent-thought',
+  streamToolCall = 'stream-tool-call',
   vision = 'vision',
   video = 'video',
   document = 'document',
   audio = 'audio',
+  StructuredOutput = 'structured-output',
 }
 
 export enum ModelFeatureTextEnum {
@@ -101,6 +113,7 @@ export type FormShowOnObject = {
 }
 
 export type CredentialFormSchemaBase = {
+  name: string
   variable: string
   label: TypeWithI18N
   type: FormTypeEnum
@@ -109,9 +122,20 @@ export type CredentialFormSchemaBase = {
   tooltip?: TypeWithI18N
   show_on: FormShowOnObject[]
   url?: string
+  scope?: string
+  input_schema?: SchemaRoot
 }
 
-export type CredentialFormSchemaTextInput = CredentialFormSchemaBase & { max_length?: number; placeholder?: TypeWithI18N }
+export type CredentialFormSchemaTextInput = CredentialFormSchemaBase & {
+  max_length?: number;
+  placeholder?: TypeWithI18N,
+  template?: {
+    enabled: boolean
+  },
+  auto_generate?: {
+    type: string
+  }
+}
 export type CredentialFormSchemaNumberInput = CredentialFormSchemaBase & { min?: number; max?: number; placeholder?: TypeWithI18N }
 export type CredentialFormSchemaSelect = CredentialFormSchemaBase & { options: FormOption[]; placeholder?: TypeWithI18N }
 export type CredentialFormSchemaRadio = CredentialFormSchemaBase & { options: FormOption[] }

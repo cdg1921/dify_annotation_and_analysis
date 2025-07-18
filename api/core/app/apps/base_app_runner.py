@@ -1,3 +1,4 @@
+import logging
 import time
 from collections.abc import Generator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Optional, Union
@@ -17,7 +18,11 @@ from core.external_data_tool.external_data_fetch import ExternalDataFetch
 from core.memory.token_buffer_memory import TokenBufferMemory
 from core.model_manager import ModelInstance
 from core.model_runtime.entities.llm_entities import LLMResult, LLMResultChunk, LLMResultChunkDelta, LLMUsage
-from core.model_runtime.entities.message_entities import AssistantPromptMessage, PromptMessage
+from core.model_runtime.entities.message_entities import (
+    AssistantPromptMessage,
+    ImagePromptMessageContent,
+    PromptMessage,
+)
 from core.model_runtime.entities.model_entities import ModelPropertyKey
 from core.model_runtime.errors.invoke import InvokeBadRequestError
 from core.moderation.input_moderation import InputModeration
@@ -29,7 +34,9 @@ from models.model import App, AppMode, Message, MessageAnnotation
 if TYPE_CHECKING:
     from core.file.models import File
 
-# cdg:基础应用执行器，主要功能包括获取模型配置、获取模型实例、获取提示词、获取模型支持的上下文长度、获取max_tokens、计算可用token长度、重新计算max_tokens长度等
+_logger = logging.getLogger(__name__)
+
+
 class AppRunner:
     def get_pre_calculate_rest_tokens(
         self,
@@ -42,7 +49,6 @@ class AppRunner:
     ) -> int:
         """
         Get pre calculate rest tokens
-
         :param app_record: app record
         :param model_config: model config entity
         :param prompt_template_entity: prompt template entity
@@ -51,19 +57,13 @@ class AppRunner:
         :param query: query
         :return:
         """
-        # cdg:计算可用token长度，即上下文总长度-max_tokens-Prompt之后剩余的tokens长度
-
         # Invoke model
-        # cdg:通过ModelInstance的方式实例化大模型实例。
-        # 大模型实例化有两种方式：一种是ModelInstance，另一种是ModelManager。两者的参数不同，后者继承了前者。
         model_instance = ModelInstance(
             provider_model_bundle=model_config.provider_model_bundle, model=model_config.model
         )
 
-        # cdg:获取模型支持的上下文长度
         model_context_tokens = model_config.model_schema.model_properties.get(ModelPropertyKey.CONTEXT_SIZE)
 
-        # cdg:获取max_tokens，根据参数规则获取max_tokens
         max_tokens = 0
         for parameter_rule in model_config.model_schema.parameter_rules:
             if parameter_rule.name == "max_tokens" or (
@@ -80,7 +80,6 @@ class AppRunner:
         if max_tokens is None:
             max_tokens = 0
 
-        # cdg:构建提示词
         # get prompt messages without memory and context
         prompt_messages, stop = self.organize_prompt_messages(
             app_record=app_record,
@@ -91,11 +90,8 @@ class AppRunner:
             query=query,
         )
 
-        # cdg:获取提示词token长度
         prompt_tokens = model_instance.get_llm_num_tokens(prompt_messages)
 
-        # cdg:计算剩余token长度，将model_context_tokens减去prompt_tokens和prompt_tokens，如果小于0，则抛出异常。
-        # 也就是说prompt_tokens的长度不能超过model_context_tokens和max_tokens的差值，需要对提示词的长度进行裁剪。
         rest_tokens: int = model_context_tokens - max_tokens - prompt_tokens
         if rest_tokens < 0:
             raise InvokeBadRequestError(
@@ -109,9 +105,6 @@ class AppRunner:
         self, model_config: ModelConfigWithCredentialsEntity, prompt_messages: list[PromptMessage]
     ):
         # recalc max_tokens if sum(prompt_token +  max_tokens) over model token limit
-        # cdg:重新计算max_tokens长度。
-
-        # cdg:通过ModelInstance的方式实例化大模型实例。
         model_instance = ModelInstance(
             provider_model_bundle=model_config.provider_model_bundle, model=model_config.model
         )
@@ -136,9 +129,7 @@ class AppRunner:
 
         prompt_tokens = model_instance.get_llm_num_tokens(prompt_messages)
 
-        # cdg:如果提示词的token长度+max_tokens大于模型所支持的上下文长度，则将max_tokens设置为一个不小于16的值。
         if prompt_tokens + max_tokens > model_context_tokens:
-            # cdg:如果model_context_tokens - prompt_tokens大于16，则max_tokens=model_context_tokens - prompt_tokens，否则为16
             max_tokens = max(model_context_tokens - prompt_tokens, 16)
 
             for parameter_rule in model_config.model_schema.parameter_rules:
@@ -147,8 +138,6 @@ class AppRunner:
                 ):
                     model_config.parameters[parameter_rule.name] = max_tokens
 
-    # cdg:构建提示词消息，将提示词消息组织成PromptMessage对象，并返回一个元组，其中包含PromptMessage对象列表和停止标记列表。
-    # cdg:提示词包含了用户输入的query、prompt_template、文件、query_prefix、query_suffix、context、memory等信息
     def organize_prompt_messages(
         self,
         app_record: App,
@@ -159,6 +148,7 @@ class AppRunner:
         query: Optional[str] = None,
         context: Optional[str] = None,
         memory: Optional[TokenBufferMemory] = None,
+        image_detail_config: Optional[ImagePromptMessageContent.DETAIL] = None,
     ) -> tuple[list[PromptMessage], Optional[list[str]]]:
         """
         Organize prompt messages
@@ -170,16 +160,12 @@ class AppRunner:
         :param files: files
         :param query: query
         :param memory: memory
+        :param image_detail_config: the image quality config
         :return:
         """
         # get prompt without memory and context
-        # cdg:SIMPLE类型的Prompt与advanced类型的Prompt差异主要在于是否有历史消息。SimplePromptTransform 和 AdvancedPromptTransform 的主要区别在于功能复杂度、提示模板解析能力、历史对话管理机制、扩展性和灵活性以及适用的应用场景。SimplePromptTransform 适合处理简单的提示生成任务，而 AdvancedPromptTransform 则提供了更强大的功能和灵活性，适用于更复杂的对话管理和提示定制需求。
-        # cdg:AdvancedPromptTransform用于工作流或者Agent场景，SimplePromptTransform用于一般聊天对话或者补全场景
         if prompt_template_entity.prompt_type == PromptTemplateEntity.PromptType.SIMPLE:
-            # cdg:prompt_transform只能是SimplePromptTransform或AdvancedPromptTransform的实例，所以这里进行类型声明。
             prompt_transform: Union[SimplePromptTransform, AdvancedPromptTransform]
-            # cdg:创建一个SimplePromptTransform对象，并调用get_prompt方法，传入参数，获取提示词消息和停止标记。
-            # cdg:SimplePromptTransform主要实现了根据用户输入（如query、input、files）,从供应商的prompt模板中生成提示词消息。供应商的prompt模板从本地文件中加载。
             prompt_transform = SimplePromptTransform()
             prompt_messages, stop = prompt_transform.get_prompt(
                 app_mode=AppMode.value_of(app_record.mode),
@@ -190,15 +176,13 @@ class AppRunner:
                 context=context,
                 memory=memory,
                 model_config=model_config,
+                image_detail_config=image_detail_config,
             )
         else:
             memory_config = MemoryConfig(window=MemoryConfig.WindowConfig(enabled=False))
 
             model_mode = ModelMode.value_of(model_config.mode)
-            # cdg:定义prompt_template变量，指定prompt_template的类型，CompletionModelPromptTemplate中不包含role，ChatModelMessage中包含role
-            # cdg:CompletionModelPromptTemplate用于completion场景，无role。ChatModelMessage用于chat场景，需要包含role。
             prompt_template: Union[CompletionModelPromptTemplate, list[ChatModelMessage]]
-            # cdg:根据模型模式，创建一个AdvancedPromptTransform对象，并调用get_prompt方法，实例化prompt_template
             if model_mode == ModelMode.COMPLETION:
                 advanced_completion_prompt_template = prompt_template_entity.advanced_completion_prompt_template
                 if not advanced_completion_prompt_template:
@@ -227,6 +211,7 @@ class AppRunner:
                 memory_config=memory_config,
                 memory=memory,
                 model_config=model_config,
+                image_detail_config=image_detail_config,
             )
             stop = model_config.stop
 
@@ -254,19 +239,16 @@ class AppRunner:
         if stream:
             index = 0
             for token in text:
-                # cdg:构建LLMResultChunk对象
                 chunk = LLMResultChunk(
                     model=app_generate_entity.model_conf.model,
                     prompt_messages=prompt_messages,
                     delta=LLMResultChunkDelta(index=index, message=AssistantPromptMessage(content=token)),
                 )
 
-                # cdg:将每个LLMResultChunk对象发布到消息队列
                 queue_manager.publish(QueueLLMChunkEvent(chunk=chunk), PublishFrom.APPLICATION_MANAGER)
                 index += 1
                 time.sleep(0.01)
 
-        # cdg:将结束消息发布到消息队列，输出类型为QueueMessageEndEvent
         queue_manager.publish(
             QueueMessageEndEvent(
                 llm_result=LLMResult(
@@ -294,7 +276,6 @@ class AppRunner:
         :param agent: agent
         :return:
         """
-        # cdg:模型返回结果处理，分流式输出和阻塞式输出两种
         if not stream and isinstance(invoke_result, LLMResult):
             self._handle_invoke_result_direct(invoke_result=invoke_result, queue_manager=queue_manager, agent=agent)
         elif stream and isinstance(invoke_result, Generator):
@@ -312,7 +293,6 @@ class AppRunner:
         :param agent: agent
         :return:
         """
-        # cdg:阻塞式输出，一次性发布到消息队列
         queue_manager.publish(
             QueueMessageEndEvent(
                 llm_result=invoke_result,
@@ -321,7 +301,7 @@ class AppRunner:
         )
 
     def _handle_invoke_result_stream(
-        self, invoke_result: Generator, queue_manager: AppQueueManager, agent: bool
+        self, invoke_result: Generator[LLMResultChunk, None, None], queue_manager: AppQueueManager, agent: bool
     ) -> None:
         """
         Handle invoke result
@@ -330,7 +310,6 @@ class AppRunner:
         :param agent: agent
         :return:
         """
-        # cdg:流式输出方式，首先将每个chunk发布到消息队列，根据应用的类型分为QueueLLMChunkEvent和QueueAgentMessageEvent
         model: str = ""
         prompt_messages: list[PromptMessage] = []
         text = ""
@@ -341,28 +320,34 @@ class AppRunner:
             else:
                 queue_manager.publish(QueueAgentMessageEvent(chunk=result), PublishFrom.APPLICATION_MANAGER)
 
-            text += result.delta.message.content
+            message = result.delta.message
+            if isinstance(message.content, str):
+                text += message.content
+            elif isinstance(message.content, list):
+                for content in message.content:
+                    if not isinstance(content, str):
+                        # TODO(QuantumGhost): Add multimodal output support for easy ui.
+                        _logger.warning("received multimodal output, type=%s", type(content))
+                        text += content.data
+                    else:
+                        text += content  # failback to str
 
-            # cdg:获取model名称，用于构建LLMResult
             if not model:
                 model = result.model
 
-            # cdg:获取prompt_messages，用于构建LLMResult
             if not prompt_messages:
-                prompt_messages = result.prompt_messages
+                prompt_messages = list(result.prompt_messages)
 
-            # cdg:获取usage，用于构建LLMResult
             if result.delta.usage:
                 usage = result.delta.usage
 
-        if not usage:
+        if usage is None:
             usage = LLMUsage.empty_usage()
 
         llm_result = LLMResult(
             model=model, prompt_messages=prompt_messages, message=AssistantPromptMessage(content=text), usage=usage
         )
 
-        # cdg:最终将整体的llm_result发布到消息队列
         queue_manager.publish(
             QueueMessageEndEvent(
                 llm_result=llm_result,
@@ -390,12 +375,7 @@ class AppRunner:
         :param message_id: message id
         :return:
         """
-        # cdg:输入Query合规（敏感词）检测
-
-        # cdg:创建输入敏感词检测器InputModeration
         moderation_feature = InputModeration()
-
-        # cdg:执行敏感词检测过程，返回检测结果，没有敏感信息则返回False，若有敏感信息，则返回True。并且返回修正后的结果
         return moderation_feature.check(
             app_id=app_id,
             tenant_id=tenant_id,
@@ -419,7 +399,6 @@ class AppRunner:
         :param prompt_messages: prompt messages
         :return:
         """
-        # cdg:提示词敏感词检测
         hosting_moderation_feature = HostingModerationFeature()
         moderation_result = hosting_moderation_feature.check(
             application_generate_entity=application_generate_entity, prompt_messages=prompt_messages
@@ -454,7 +433,6 @@ class AppRunner:
         :param query: the query
         :return: the filled inputs
         """
-        # cdg:将外部数据工具补充到inputs中
         external_data_fetch_feature = ExternalDataFetch()
         return external_data_fetch_feature.fetch(
             tenant_id=tenant_id, app_id=app_id, external_data_tools=external_data_tools, inputs=inputs, query=query
@@ -472,7 +450,6 @@ class AppRunner:
         :param invoke_from: invoke from
         :return:
         """
-        # cdg:app注释信息查询
         annotation_reply_feature = AnnotationReplyFeature()
         return annotation_reply_feature.query(
             app_record=app_record, message=message, query=query, user_id=user_id, invoke_from=invoke_from

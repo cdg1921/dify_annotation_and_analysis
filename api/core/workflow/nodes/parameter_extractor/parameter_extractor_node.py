@@ -1,4 +1,5 @@
 import json
+import logging
 import uuid
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional, cast
@@ -7,6 +8,7 @@ from core.app.entities.app_invoke_entities import ModelConfigWithCredentialsEnti
 from core.file import File
 from core.memory.token_buffer_memory import TokenBufferMemory
 from core.model_manager import ModelInstance
+from core.model_runtime.entities import ImagePromptMessageContent
 from core.model_runtime.entities.llm_entities import LLMResult, LLMUsage
 from core.model_runtime.entities.message_entities import (
     AssistantPromptMessage,
@@ -23,13 +25,15 @@ from core.prompt.advanced_prompt_transform import AdvancedPromptTransform
 from core.prompt.entities.advanced_prompt_entities import ChatModelMessage, CompletionModelPromptTemplate
 from core.prompt.simple_prompt_transform import ModelMode
 from core.prompt.utils.prompt_message_util import PromptMessageUtil
-from core.workflow.entities.node_entities import NodeRunMetadataKey, NodeRunResult
+from core.variables.types import SegmentType
+from core.workflow.entities.node_entities import NodeRunResult
 from core.workflow.entities.variable_pool import VariablePool
+from core.workflow.entities.workflow_node_execution import WorkflowNodeExecutionMetadataKey, WorkflowNodeExecutionStatus
+from core.workflow.nodes.base.node import BaseNode
 from core.workflow.nodes.enums import NodeType
-from core.workflow.nodes.llm import LLMNode, ModelConfig
+from core.workflow.nodes.llm import ModelConfig, llm_utils
 from core.workflow.utils import variable_template_parser
-from extensions.ext_database import db
-from models.workflow import WorkflowNodeExecutionStatus
+from factories.variable_factory import build_segment_with_type
 
 from .entities import ParameterExtractorNodeData
 from .exc import (
@@ -57,8 +61,32 @@ from .prompts import (
     FUNCTION_CALLING_EXTRACTOR_USER_TEMPLATE,
 )
 
+logger = logging.getLogger(__name__)
 
-class ParameterExtractorNode(LLMNode):
+
+def extract_json(text):
+    """
+    From a given JSON started from '{' or '[' extract the complete JSON object.
+    """
+    stack = []
+    for i, c in enumerate(text):
+        if c in {"{", "["}:
+            stack.append(c)
+        elif c in {"}", "]"}:
+            # check if stack is empty
+            if not stack:
+                return text[:i]
+            # check if the last element in stack is matching
+            if (c == "}" and stack[-1] == "{") or (c == "]" and stack[-1] == "["):
+                stack.pop()
+                if not stack:
+                    return text[: i + 1]
+            else:
+                return text[:i]
+    return None
+
+
+class ParameterExtractorNode(BaseNode):
     """
     Parameter Extractor Node.
     """
@@ -83,6 +111,10 @@ class ParameterExtractorNode(LLMNode):
             }
         }
 
+    @classmethod
+    def version(cls) -> str:
+        return "1"
+
     def _run(self):
         """
         Run the node.
@@ -91,8 +123,11 @@ class ParameterExtractorNode(LLMNode):
         variable = self.graph_runtime_state.variable_pool.get(node_data.query)
         query = variable.text if variable else ""
 
+        variable_pool = self.graph_runtime_state.variable_pool
+
         files = (
-            self._fetch_files(
+            llm_utils.fetch_files(
+                variable_pool=variable_pool,
                 selector=node_data.vision.configs.variable_selector,
             )
             if node_data.vision.enabled
@@ -112,7 +147,9 @@ class ParameterExtractorNode(LLMNode):
             raise ModelSchemaNotFoundError("Model schema not found")
 
         # fetch memory
-        memory = self._fetch_memory(
+        memory = llm_utils.fetch_memory(
+            variable_pool=variable_pool,
+            app_id=self.app_id,
             node_data_memory=node_data.memory,
             model_instance=model_instance,
         )
@@ -129,6 +166,7 @@ class ParameterExtractorNode(LLMNode):
                 model_config=model_config,
                 memory=memory,
                 files=files,
+                vision_detail=node_data.vision.configs.detail,
             )
         else:
             # use prompt engineering
@@ -139,6 +177,7 @@ class ParameterExtractorNode(LLMNode):
                 model_config=model_config,
                 memory=memory,
                 files=files,
+                vision_detail=node_data.vision.configs.detail,
             )
 
             prompt_message_tools = []
@@ -158,6 +197,8 @@ class ParameterExtractorNode(LLMNode):
             "usage": None,
             "function": {} if not prompt_message_tools else jsonable_encoder(prompt_message_tools[0]),
             "tool_call": None,
+            "model_provider": model_config.provider,
+            "model_name": model_config.model,
         }
 
         try:
@@ -212,11 +253,16 @@ class ParameterExtractorNode(LLMNode):
             status=WorkflowNodeExecutionStatus.SUCCEEDED,
             inputs=inputs,
             process_data=process_data,
-            outputs={"__is_success": 1 if not error else 0, "__reason": error, **result},
+            outputs={
+                "__is_success": 1 if not error else 0,
+                "__reason": error,
+                "__usage": jsonable_encoder(usage),
+                **result,
+            },
             metadata={
-                NodeRunMetadataKey.TOTAL_TOKENS: usage.total_tokens,
-                NodeRunMetadataKey.TOTAL_PRICE: usage.total_price,
-                NodeRunMetadataKey.CURRENCY: usage.currency,
+                WorkflowNodeExecutionMetadataKey.TOTAL_TOKENS: usage.total_tokens,
+                WorkflowNodeExecutionMetadataKey.TOTAL_PRICE: usage.total_price,
+                WorkflowNodeExecutionMetadataKey.CURRENCY: usage.currency,
             },
             llm_usage=usage,
         )
@@ -229,8 +275,6 @@ class ParameterExtractorNode(LLMNode):
         tools: list[PromptMessageTool],
         stop: list[str],
     ) -> tuple[str, LLMUsage, Optional[AssistantPromptMessage.ToolCall]]:
-        db.session.close()
-
         invoke_result = model_instance.invoke_llm(
             prompt_messages=prompt_messages,
             model_parameters=node_data_model.completion_params,
@@ -244,15 +288,15 @@ class ParameterExtractorNode(LLMNode):
         if not isinstance(invoke_result, LLMResult):
             raise InvalidInvokeResultError(f"Invalid invoke result: {invoke_result}")
 
-        text = invoke_result.message.content
-        if not isinstance(text, str | None):
+        text = invoke_result.message.content or ""
+        if not isinstance(text, str):
             raise InvalidTextContentTypeError(f"Invalid text content type: {type(text)}. Expected str.")
 
         usage = invoke_result.usage
         tool_call = invoke_result.message.tool_calls[0] if invoke_result.message.tool_calls else None
 
         # deduct quota
-        self.deduct_llm_quota(tenant_id=self.tenant_id, model_instance=model_instance, usage=usage)
+        llm_utils.deduct_llm_quota(tenant_id=self.tenant_id, model_instance=model_instance, usage=usage)
 
         if text is None:
             text = ""
@@ -267,6 +311,7 @@ class ParameterExtractorNode(LLMNode):
         model_config: ModelConfigWithCredentialsEntity,
         memory: Optional[TokenBufferMemory],
         files: Sequence[File],
+        vision_detail: Optional[ImagePromptMessageContent.DETAIL] = None,
     ) -> tuple[list[PromptMessage], list[PromptMessageTool]]:
         """
         Generate function call prompt.
@@ -289,6 +334,7 @@ class ParameterExtractorNode(LLMNode):
             memory_config=node_data.memory,
             memory=None,
             model_config=model_config,
+            image_detail_config=vision_detail,
         )
 
         # find last user message
@@ -347,6 +393,7 @@ class ParameterExtractorNode(LLMNode):
         model_config: ModelConfigWithCredentialsEntity,
         memory: Optional[TokenBufferMemory],
         files: Sequence[File],
+        vision_detail: Optional[ImagePromptMessageContent.DETAIL] = None,
     ) -> list[PromptMessage]:
         """
         Generate prompt engineering prompt.
@@ -361,6 +408,7 @@ class ParameterExtractorNode(LLMNode):
                 model_config=model_config,
                 memory=memory,
                 files=files,
+                vision_detail=vision_detail,
             )
         elif model_mode == ModelMode.CHAT:
             return self._generate_prompt_engineering_chat_prompt(
@@ -370,6 +418,7 @@ class ParameterExtractorNode(LLMNode):
                 model_config=model_config,
                 memory=memory,
                 files=files,
+                vision_detail=vision_detail,
             )
         else:
             raise InvalidModelModeError(f"Invalid model mode: {model_mode}")
@@ -382,6 +431,7 @@ class ParameterExtractorNode(LLMNode):
         model_config: ModelConfigWithCredentialsEntity,
         memory: Optional[TokenBufferMemory],
         files: Sequence[File],
+        vision_detail: Optional[ImagePromptMessageContent.DETAIL] = None,
     ) -> list[PromptMessage]:
         """
         Generate completion prompt.
@@ -402,6 +452,7 @@ class ParameterExtractorNode(LLMNode):
             memory_config=node_data.memory,
             memory=memory,
             model_config=model_config,
+            image_detail_config=vision_detail,
         )
 
         return prompt_messages
@@ -414,6 +465,7 @@ class ParameterExtractorNode(LLMNode):
         model_config: ModelConfigWithCredentialsEntity,
         memory: Optional[TokenBufferMemory],
         files: Sequence[File],
+        vision_detail: Optional[ImagePromptMessageContent.DETAIL] = None,
     ) -> list[PromptMessage]:
         """
         Generate chat prompt.
@@ -441,6 +493,7 @@ class ParameterExtractorNode(LLMNode):
             memory_config=node_data.memory,
             memory=None,
             model_config=model_config,
+            image_detail_config=vision_detail,
         )
 
         # find last user message
@@ -542,28 +595,30 @@ class ParameterExtractorNode(LLMNode):
                 elif parameter.type in {"string", "select"}:
                     if isinstance(result[parameter.name], str):
                         transformed_result[parameter.name] = result[parameter.name]
-                elif parameter.type.startswith("array"):
+                elif parameter.is_array_type():
                     if isinstance(result[parameter.name], list):
-                        nested_type = parameter.type[6:-1]
-                        transformed_result[parameter.name] = []
+                        nested_type = parameter.element_type()
+                        assert nested_type is not None
+                        segment_value = build_segment_with_type(segment_type=SegmentType(parameter.type), value=[])
+                        transformed_result[parameter.name] = segment_value
                         for item in result[parameter.name]:
                             if nested_type == "number":
                                 if isinstance(item, int | float):
-                                    transformed_result[parameter.name].append(item)
+                                    segment_value.value.append(item)
                                 elif isinstance(item, str):
                                     try:
                                         if "." in item:
-                                            transformed_result[parameter.name].append(float(item))
+                                            segment_value.value.append(float(item))
                                         else:
-                                            transformed_result[parameter.name].append(int(item))
+                                            segment_value.value.append(int(item))
                                     except ValueError:
                                         pass
                             elif nested_type == "string":
                                 if isinstance(item, str):
-                                    transformed_result[parameter.name].append(item)
+                                    segment_value.value.append(item)
                             elif nested_type == "object":
                                 if isinstance(item, dict):
-                                    transformed_result[parameter.name].append(item)
+                                    segment_value.value.append(item)
 
             if parameter.name not in transformed_result:
                 if parameter.type == "number":
@@ -573,7 +628,9 @@ class ParameterExtractorNode(LLMNode):
                 elif parameter.type in {"string", "select"}:
                     transformed_result[parameter.name] = ""
                 elif parameter.type.startswith("array"):
-                    transformed_result[parameter.name] = []
+                    transformed_result[parameter.name] = build_segment_with_type(
+                        segment_type=SegmentType(parameter.type), value=[]
+                    )
 
         return transformed_result
 
@@ -581,27 +638,6 @@ class ParameterExtractorNode(LLMNode):
         """
         Extract complete json response.
         """
-
-        def extract_json(text):
-            """
-            From a given JSON started from '{' or '[' extract the complete JSON object.
-            """
-            stack = []
-            for i, c in enumerate(text):
-                if c in {"{", "["}:
-                    stack.append(c)
-                elif c in {"}", "]"}:
-                    # check if stack is empty
-                    if not stack:
-                        return text[:i]
-                    # check if the last element in stack is matching
-                    if (c == "}" and stack[-1] == "{") or (c == "]" and stack[-1] == "["):
-                        stack.pop()
-                        if not stack:
-                            return text[: i + 1]
-                    else:
-                        return text[:i]
-            return None
 
         # extract json from the text
         for idx in range(len(result)):
@@ -612,6 +648,7 @@ class ParameterExtractorNode(LLMNode):
                         return cast(dict, json.loads(json_str))
                     except Exception:
                         pass
+        logger.info(f"extra error: {result}")
         return None
 
     def _extract_json_from_tool_call(self, tool_call: AssistantPromptMessage.ToolCall) -> Optional[dict]:
@@ -621,7 +658,18 @@ class ParameterExtractorNode(LLMNode):
         if not tool_call or not tool_call.function.arguments:
             return None
 
-        return cast(dict, json.loads(tool_call.function.arguments))
+        result = tool_call.function.arguments
+        # extract json from the arguments
+        for idx in range(len(result)):
+            if result[idx] == "{" or result[idx] == "[":
+                json_str = extract_json(result[idx:])
+                if json_str:
+                    try:
+                        return cast(dict, json.loads(json_str))
+                    except Exception:
+                        pass
+        logger.info(f"extra error: {result}")
+        return None
 
     def _generate_default_result(self, data: ParameterExtractorNodeData) -> dict:
         """
@@ -767,7 +815,9 @@ class ParameterExtractorNode(LLMNode):
         Fetch model config.
         """
         if not self._model_instance or not self._model_config:
-            self._model_instance, self._model_config = super()._fetch_model_config(node_data_model)
+            self._model_instance, self._model_config = llm_utils.fetch_model_config(
+                tenant_id=self.tenant_id, node_data_model=node_data_model
+            )
 
         return self._model_instance, self._model_config
 
@@ -786,7 +836,6 @@ class ParameterExtractorNode(LLMNode):
         :param node_data: node data
         :return:
         """
-        # FIXME: fix the type error later
         variable_mapping: dict[str, Sequence[str]] = {"query": node_data.query}
 
         if node_data.instruction:

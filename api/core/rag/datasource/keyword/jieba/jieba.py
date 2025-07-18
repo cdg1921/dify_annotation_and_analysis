@@ -88,18 +88,18 @@ class Jieba(BaseKeyword):
         keyword_table = self._get_dataset_keyword_table()
 
         k = kwargs.get("top_k", 4)
-
+        document_ids_filter = kwargs.get("document_ids_filter")
         sorted_chunk_indices = self._retrieve_ids_by_query(keyword_table or {}, query, k)
 
         documents = []
         for chunk_index in sorted_chunk_indices:
-            segment = (
-                db.session.query(DocumentSegment)
-                .filter(DocumentSegment.dataset_id == self.dataset.id, DocumentSegment.index_node_id == chunk_index)
-                .first()
+            segment_query = db.session.query(DocumentSegment).filter(
+                DocumentSegment.dataset_id == self.dataset.id, DocumentSegment.index_node_id == chunk_index
             )
+            if document_ids_filter:
+                segment_query = segment_query.filter(DocumentSegment.document_id.in_(document_ids_filter))
+            segment = segment_query.first()
 
-            # cdg:将召回的segment转为统一的documents格式，和向量召回结果格式一致
             if segment:
                 documents.append(
                     Document(
@@ -115,7 +115,6 @@ class Jieba(BaseKeyword):
 
         return documents
 
-    # cdg:删除关键词表
     def delete(self) -> None:
         lock_name = "keyword_indexing_lock_{}".format(self.dataset.id)
         with redis_client.lock(lock_name, timeout=600):
@@ -123,12 +122,10 @@ class Jieba(BaseKeyword):
             if dataset_keyword_table:
                 db.session.delete(dataset_keyword_table)
                 db.session.commit()
-                # cdg:document不是存在database，就是存在指定storage中，根据storage的key（路径）删除相应的文本
                 if dataset_keyword_table.data_source_type != "database":
                     file_key = "keyword_files/" + self.dataset.tenant_id + "/" + self.dataset.id + ".txt"
                     storage.delete(file_key)
 
-    # cdg:保存到关键词表中
     def _save_dataset_keyword_table(self, keyword_table):
         keyword_table_dict = {
             "__type__": "keyword_table",
@@ -152,7 +149,6 @@ class Jieba(BaseKeyword):
             if keyword_table_dict:
                 return dict(keyword_table_dict["__data__"]["table"])
         else:
-            # cdg:关键词倒排索引表存储方式，默认为数据库database
             keyword_data_source_type = dify_config.KEYWORD_DATA_SOURCE_TYPE
             dataset_keyword_table = DatasetKeywordTable(
                 dataset_id=self.dataset.id,
@@ -172,7 +168,6 @@ class Jieba(BaseKeyword):
 
         return {}
 
-    # cdg:新增文本到关键词表中
     def _add_text_to_keyword_table(self, keyword_table: dict, id: str, keywords: list[str]) -> dict:
         for keyword in keywords:
             if keyword not in keyword_table:
@@ -197,10 +192,8 @@ class Jieba(BaseKeyword):
 
         return keyword_table
 
-    # cdg:根据query进行关键词倒排索引
     def _retrieve_ids_by_query(self, keyword_table: dict, query: str, k: int = 4):
         keyword_table_handler = JiebaKeywordTableHandler()
-        # cdg:对query抽取关键词列表
         keywords = keyword_table_handler.extract_keywords(query)
 
         # go through text chunks in order of most matching keywords
@@ -210,7 +203,6 @@ class Jieba(BaseKeyword):
             for node_id in keyword_table[keyword]:
                 chunk_indices_count[node_id] += 1
 
-        # cdg:根据匹配次数从大到小进行排序
         sorted_chunk_indices = sorted(
             chunk_indices_count.keys(),
             key=lambda x: chunk_indices_count[x],
@@ -219,7 +211,6 @@ class Jieba(BaseKeyword):
 
         return sorted_chunk_indices[:k]
 
-    # cdg:更新segment的关键词表
     def _update_segment_keywords(self, dataset_id: str, node_id: str, keywords: list[str]):
         document_segment = (
             db.session.query(DocumentSegment)
@@ -231,7 +222,6 @@ class Jieba(BaseKeyword):
             db.session.add(document_segment)
             db.session.commit()
 
-    # cdg:添加segment到关键词表中
     def create_segment_keywords(self, node_id: str, keywords: list[str]):
         keyword_table = self._get_dataset_keyword_table()
         self._update_segment_keywords(self.dataset.id, node_id, keywords)

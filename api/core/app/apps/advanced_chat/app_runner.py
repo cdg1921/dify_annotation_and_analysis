@@ -19,6 +19,7 @@ from core.moderation.base import ModerationError
 from core.workflow.callbacks import WorkflowCallback, WorkflowLoggingCallback
 from core.workflow.entities.variable_pool import VariablePool
 from core.workflow.enums import SystemVariableKey
+from core.workflow.variable_loader import VariableLoader
 from core.workflow.workflow_entry import WorkflowEntry
 from extensions.ext_database import db
 from models.enums import UserFrom
@@ -40,13 +41,16 @@ class AdvancedChatAppRunner(WorkflowBasedAppRunner):
         conversation: Conversation,
         message: Message,
         dialogue_count: int,
+        variable_loader: VariableLoader,
     ) -> None:
-        super().__init__(queue_manager)
-
+        super().__init__(queue_manager, variable_loader)
         self.application_generate_entity = application_generate_entity
         self.conversation = conversation
         self.message = message
         self._dialogue_count = dialogue_count
+
+    def _get_app_id(self) -> str:
+        return self.application_generate_entity.app_config.app_id
 
     def run(self) -> None:
         app_config = self.application_generate_entity.app_config
@@ -77,7 +81,14 @@ class AdvancedChatAppRunner(WorkflowBasedAppRunner):
             graph, variable_pool = self._get_graph_and_variable_pool_of_single_iteration(
                 workflow=workflow,
                 node_id=self.application_generate_entity.single_iteration_run.node_id,
-                user_inputs=self.application_generate_entity.single_iteration_run.inputs,
+                user_inputs=dict(self.application_generate_entity.single_iteration_run.inputs),
+            )
+        elif self.application_generate_entity.single_loop_run:
+            # if only single loop run is requested
+            graph, variable_pool = self._get_graph_and_variable_pool_of_single_loop(
+                workflow=workflow,
+                node_id=self.application_generate_entity.single_loop_run.node_id,
+                user_inputs=dict(self.application_generate_entity.single_loop_run.inputs),
             )
         else:
             inputs = self.application_generate_entity.inputs
@@ -133,7 +144,7 @@ class AdvancedChatAppRunner(WorkflowBasedAppRunner):
                 SystemVariableKey.DIALOGUE_COUNT: self._dialogue_count,
                 SystemVariableKey.APP_ID: app_config.app_id,
                 SystemVariableKey.WORKFLOW_ID: app_config.workflow_id,
-                SystemVariableKey.WORKFLOW_RUN_ID: self.application_generate_entity.workflow_run_id,
+                SystemVariableKey.WORKFLOW_EXECUTION_ID: self.application_generate_entity.workflow_run_id,
             }
 
             # init variable pool

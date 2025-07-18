@@ -1,4 +1,0 @@
-# cdg:针对flask_restful的fields模块进行封装，提供更方便的API，方便在其基础上进行操作
-# cdg:fields模块是flask_restful中的一个模块，用于定义RESTful API的响应字段。
-# cdg:fields模块的API设计参考了django的rest_framework，提供了更方便的API，方便在其基础上进行操作。
-# cdg:fields模块最常见的场景是结合flask_restful的marshal_with装饰器，将数据库查询结果转换为API响应格式，限定了每个API返回的字段，避免返回多余的字段。
