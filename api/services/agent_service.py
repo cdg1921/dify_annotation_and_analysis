@@ -9,13 +9,15 @@ from extensions.ext_database import db
 from models.account import Account
 from models.model import App, Conversation, EndUser, Message, MessageAgentThought
 
-
+# cdg: Agent服务，包括获取代理日志。 
 class AgentService:
+    # cdg: 获取Agent日志，具体实现为：从数据库中获取会话；如果会话不存在，则抛出异常；从数据库中获取消息；如果消息不存在，则抛出异常；获取代理思考；如果会话的执行者为终端用户，则获取终端用户；如果会话的执行者为账户，则获取账户；获取时区；构建结果。
     @classmethod
     def get_agent_logs(cls, app_model: App, conversation_id: str, message_id: str) -> dict:
         """
         Service to get agent logs
         """
+        # cdg: 从数据库中获取会话
         conversation: Optional[Conversation] = (
             db.session.query(Conversation)
             .filter(
@@ -24,10 +26,10 @@ class AgentService:
             )
             .first()
         )
-
+        # cdg: 如果会话不存在，则抛出异常
         if not conversation:
             raise ValueError(f"Conversation not found: {conversation_id}")
-
+        # cdg: 从数据库中获取消息
         message: Optional[Message] = (
             db.session.query(Message)
             .filter(
@@ -36,12 +38,14 @@ class AgentService:
             )
             .first()
         )
-
+        # cdg: 如果消息不存在，则抛出异常
         if not message:
             raise ValueError(f"Message not found: {message_id}")
 
+        # cdg: 获取Agent思考过程信息
         agent_thoughts: list[MessageAgentThought] = message.agent_thoughts
 
+        # cdg: 如果会话的执行者为终端用户，则获取终端用户；如果会话的执行者为账户，则获取账户。
         if conversation.from_end_user_id:
             # only select name field
             executor = (
@@ -52,13 +56,16 @@ class AgentService:
                 db.session.query(Account, Account.name).filter(Account.id == conversation.from_account_id).first()
             )
 
+        # cdg: 如果执行者存在，则获取执行者名称；否则设置为未知。
         if executor:
             executor = executor.name
         else:
             executor = "Unknown"
 
+        # cdg: 获取时区
         timezone = pytz.timezone(current_user.timezone)
 
+        # cdg: 构建结果
         result = {
             "meta": {
                 "status": "success",
@@ -72,18 +79,22 @@ class AgentService:
             "iterations": [],
             "files": message.message_files,
         }
-
+    
+        # cdg: 获取Agent配置
         agent_config = AgentConfigManager.convert(app_model.app_model_config.to_dict())
         if not agent_config:
             return result
 
+        # cdg: 获取Agent工具
         agent_tools = agent_config.tools or []
 
+        # cdg: 查找Agent工具
         def find_agent_tool(tool_name: str):
             for agent_tool in agent_tools:
                 if agent_tool.tool_name == tool_name:
                     return agent_tool
 
+        # cdg: 遍历Agent思考过程信息，其中关键操作是：获取工具；获取工具标签；获取工具元数据；获取工具输入；获取工具输出；获取工具调用。
         for agent_thought in agent_thoughts:
             tools = agent_thought.tools
             tool_labels = agent_thought.tool_labels
@@ -115,6 +126,7 @@ class AgentService:
                 else:
                     tool_icon = ""
 
+                # cdg: 构建工具调用
                 tool_calls.append(
                     {
                         "status": "success" if not tool_meta_data.get("error") else "error",
@@ -129,6 +141,7 @@ class AgentService:
                     }
                 )
 
+            # cdg: 构建迭代结果
             result["iterations"].append(
                 {
                     "tokens": agent_thought.tokens,

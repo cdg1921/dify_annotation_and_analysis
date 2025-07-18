@@ -9,7 +9,8 @@ from tasks.mail_account_deletion_task import send_deletion_success_task
 
 logger = logging.getLogger(__name__)
 
-
+# cdg: 删除账户任务，具体实现为：从数据库中获取账户；如果账户不存在，则抛出异常；删除账户；提交数据库。
+# cdg: 这里引用celery的@shared_task装饰器，将任务添加到celery的dataset队列中，实现异步执行。
 @shared_task(queue="dataset")
 def delete_account_task(account_id):
     account = db.session.query(Account).filter(Account.id == account_id).first()
