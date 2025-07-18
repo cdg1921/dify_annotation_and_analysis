@@ -25,19 +25,19 @@ IMPORT_INFO_REDIS_KEY_PREFIX = "app_import_info:"
 IMPORT_INFO_REDIS_EXPIRY = 180  # 3 minutes
 CURRENT_DSL_VERSION = "0.1.5"
 
-
+# cdg: 导入模式，包括YAML_CONTENT、YAML_URL两种模式。
 class ImportMode(StrEnum):
     YAML_CONTENT = "yaml-content"
     YAML_URL = "yaml-url"
 
-
+# cdg: 导入状态，包括COMPLETED、COMPLETED_WITH_WARNINGS、PENDING、FAILED四种状态，即完成、完成并警告、等待、失败。
 class ImportStatus(StrEnum):
     COMPLETED = "completed"
     COMPLETED_WITH_WARNINGS = "completed-with-warnings"
     PENDING = "pending"
     FAILED = "failed"
 
-
+# cdg: 导入，包括ID、状态、应用ID、当前DSL版本、导入DSL版本、错误信息。
 class Import(BaseModel):
     id: str
     status: ImportStatus
@@ -46,25 +46,30 @@ class Import(BaseModel):
     imported_dsl_version: str = ""
     error: str = ""
 
-
+# cdg: 检查版本兼容性，具体实现为：解析当前DSL版本和导入DSL版本；如果导入DSL版本解析失败，则返回失败；如果当前DSL版本和导入DSL版本的主版本和次版本不一致，则返回等待；如果当前DSL版本和导入DSL版本的主版本和次版本一致，则返回完成并警告；如果当前DSL版本和导入DSL版本的主版本和次版本一致，则返回完成。
 def _check_version_compatibility(imported_version: str) -> ImportStatus:
     """Determine import status based on version comparison"""
+    # cdg:基于版本号判断导入状态
+
+    # cdg: 解析当前DSL版本和导入DSL版本
     try:
         current_ver = version.parse(CURRENT_DSL_VERSION)
         imported_ver = version.parse(imported_version)
     except version.InvalidVersion:
         return ImportStatus.FAILED
 
+    # cdg: 比较主版本和次版本
     # Compare major version and minor version
     if current_ver.major != imported_ver.major or current_ver.minor != imported_ver.minor:
         return ImportStatus.PENDING
 
+    # cdg: 比较微版本
     if current_ver.micro != imported_ver.micro:
         return ImportStatus.COMPLETED_WITH_WARNINGS
 
     return ImportStatus.COMPLETED
 
-
+# cdg: 导入数据类，包括导入模式、YAML内容、名称、描述、图标类型、图标、图标背景、应用ID。
 class PendingData(BaseModel):
     import_mode: str
     yaml_content: str
@@ -75,11 +80,12 @@ class PendingData(BaseModel):
     icon_background: str | None
     app_id: str | None
 
-
+# cdg: 应用DSL服务，包括导入应用、确认导入、创建或更新应用。
 class AppDslService:
     def __init__(self, session: Session):
         self._session = session
 
+    # cdg: 导入应用，具体实现为：验证导入模式；获取YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理YAML内容；处理Y
     def import_app(
         self,
         *,
@@ -103,6 +109,7 @@ class AppDslService:
         except ValueError:
             raise ValueError(f"Invalid import_mode: {import_mode}")
 
+        # cdg: 获取YAML内容
         # Get YAML content
         content: str = ""
         if mode == ImportMode.YAML_URL:
@@ -154,6 +161,7 @@ class AppDslService:
                 )
             content = yaml_content
 
+        # cdg: 处理YAML内容
         # Process YAML content
         try:
             # Parse YAML to validate format
@@ -206,6 +214,7 @@ class AppDslService:
                         error="Only workflow or advanced chat apps can be overwritten",
                     )
 
+            # cdg: 如果主版本不匹配，则将导入信息存储在Redis中
             # If major version mismatch, store import info in Redis
             if status == ImportStatus.PENDING:
                 panding_data = PendingData(
@@ -231,6 +240,7 @@ class AppDslService:
                     imported_dsl_version=imported_version,
                 )
 
+            # cdg: 创建或更新应用
             # Create or update app
             app = self._create_or_update_app(
                 app=app,
@@ -242,6 +252,7 @@ class AppDslService:
                 icon=icon,
                 icon_background=icon_background,
             )
+
 
             return Import(
                 id=import_id,
@@ -265,6 +276,7 @@ class AppDslService:
                 error=str(e),
             )
 
+    # cdg: 确认导入，具体实现为：获取导入信息；如果导入信息不存在，则返回失败；如果导入信息类型不正确，则返回失败；如果导入信息类型正确，则获取导入信息；如果导入信息应用ID存在，则获取应用；创建或更新应用；删除导入信息；返回导入信息。
     def confirm_import(self, *, import_id: str, account: Account) -> Import:
         """
         Confirm an import that requires confirmation
@@ -325,6 +337,7 @@ class AppDslService:
                 error=str(e),
             )
 
+    # cdg: 创建或更新应用，具体实现为：获取应用数据；获取应用模式；如果应用模式不存在，则抛出异常；设置图标类型；设置图标；如果应用存在，则更新应用；否则创建应用；初始化应用；如果应用模式为工作流，则初始化工作流；如果应用模式为聊天，则初始化聊天；如果应用模式为完成，则初始化完成；返回应用。
     def _create_or_update_app(
         self,
         *,
@@ -385,26 +398,34 @@ class AppDslService:
             app_was_created.send(app, account=account)
 
         # Initialize app based on mode
+        # cdg: 如果应用模式为工作流，则初始化工作流；如果应用模式为聊天，则初始化聊天；如果应用模式为完成，则初始化完成。
         if app_mode in {AppMode.ADVANCED_CHAT, AppMode.WORKFLOW}:
             workflow_data = data.get("workflow")
             if not workflow_data or not isinstance(workflow_data, dict):
                 raise ValueError("Missing workflow data for workflow/advanced chat app")
 
+            # cdg: 初始化环境变量，从工作流数据中获取环境变量列表；如果环境变量列表不存在，则抛出异常；如果环境变量列表类型不正确，则抛出异常；初始化环境变量；初始化会话变量；初始化工作流服务；获取当前草稿工作流；如果当前草稿工作流存在，则获取当前草稿工作流的唯一哈希；否则设置为None；同步工作流；如果应用模式为聊天，则初始化聊天；如果应用模式为完成，则初始化完成。
             environment_variables_list = workflow_data.get("environment_variables", [])
             environment_variables = [
                 variable_factory.build_environment_variable_from_mapping(obj) for obj in environment_variables_list
             ]
+
+            # cdg: 初始化会话变量，从工作流数据中获取会话变量列表；如果会话变量列表不存在，则抛出异常；如果会话变量列表类型不正确，则抛出异常；初始化会话变量。
             conversation_variables_list = workflow_data.get("conversation_variables", [])
             conversation_variables = [
                 variable_factory.build_conversation_variable_from_mapping(obj) for obj in conversation_variables_list
             ]
+            # cdg:环境变量与会话变量的区别在于：环境变量是全局变量，会话变量是会话变量。
 
+            # cdg: 初始化工作流服务；获取当前草稿工作流；如果当前草稿工作流存在，则获取当前草稿工作流的唯一哈希；否则设置为None；同步工作流；如果应用模式为聊天，则初始化聊天；如果应用模式为完成，则初始化完成。
             workflow_service = WorkflowService()
             current_draft_workflow = workflow_service.get_draft_workflow(app_model=app)
             if current_draft_workflow:
                 unique_hash = current_draft_workflow.unique_hash
             else:
                 unique_hash = None
+
+            # cdg: 同步工作流；如果应用模式为聊天，则初始化聊天；如果应用模式为完成，则初始化完成。
             workflow_service.sync_draft_workflow(
                 app_model=app,
                 graph=workflow_data.get("graph", {}),
@@ -435,6 +456,7 @@ class AppDslService:
             raise ValueError("Invalid app mode")
         return app
 
+    # cdg: 导出DSL，具体实现为：获取应用模式；导出应用数据；如果应用模式为工作流，则导出工作流；如果应用模式为聊天，则导出聊天；如果应用模式为完成，则导出完成；返回DSL。
     @classmethod
     def export_dsl(cls, app_model: App, include_secret: bool = False) -> str:
         """
@@ -466,6 +488,8 @@ class AppDslService:
 
         return yaml.dump(export_data, allow_unicode=True)  # type: ignore
 
+    # cdg: 导出工作流数据，具体实现为：获取工作流服务；获取当前草稿工作流；如果当前草稿工作流不存在，则抛出异常；导出工作流数据；返回工作流数据。
+
     @classmethod
     def _append_workflow_export_data(cls, *, export_data: dict, app_model: App, include_secret: bool) -> None:
         """
@@ -480,6 +504,7 @@ class AppDslService:
 
         export_data["workflow"] = workflow.to_dict(include_secret=include_secret)
 
+    # cdg: 导出模型配置数据，具体实现为：获取应用模型配置；如果应用模型配置不存在，则抛出异常；导出模型配置数据；返回模型配置数据。
     @classmethod
     def _append_model_config_export_data(cls, export_data: dict, app_model: App) -> None:
         """

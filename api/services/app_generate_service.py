@@ -16,8 +16,9 @@ from models.workflow import Workflow
 from services.errors.llm import InvokeRateLimitError
 from services.workflow_service import WorkflowService
 
-
+# cdg: 应用生成服务，包括生成应用、获取最大活动请求、生成单次迭代、生成更多类似、获取工作流。
 class AppGenerateService:
+    # cdg: 生成应用，具体实现为：获取最大活动请求；创建速率限制；生成请求ID；如果应用模式为完成，则生成完成；如果应用模式为代理聊天，则生成代理聊天；如果应用模式为聊天，则生成聊天；如果应用模式为高级聊天，则生成高级聊天；如果应用模式为工作流，则生成工作流；否则抛出异常。
     @classmethod
     def generate(
         cls,
@@ -36,11 +37,16 @@ class AppGenerateService:
         :param streaming: streaming
         :return:
         """
+        # cdg: 获取最大活动请求次数
         max_active_request = AppGenerateService._get_max_active_requests(app_model)
+        # cdg: 创建速率限制
         rate_limit = RateLimit(app_model.id, max_active_request)
+        # cdg: 生成请求ID
         request_id = RateLimit.gen_request_key()
+        # cdg: 进入速率限制
         try:
             request_id = rate_limit.enter(request_id)
+            # cdg: 如果应用模式为补全，则生成补全；如果应用模式为代理聊天，则生成代理聊天；如果应用模式为聊天，则生成聊天；如果应用模式为高级聊天，则生成高级聊天；如果应用模式为工作流，则生成工作流；否则抛出异常。
             if app_model.mode == AppMode.COMPLETION.value:
                 return rate_limit.generate(
                     generator=CompletionAppGenerator().generate(
@@ -111,10 +117,12 @@ class AppGenerateService:
         except Exception:
             rate_limit.exit(request_id)
             raise
+        # cdg: 如果流式输出为False，则退出速率限制
         finally:
             if not streaming:
                 rate_limit.exit(request_id)
 
+    # cdg: 获取最大活动请求次数，具体实现为：如果应用的最大活动请求次数不存在，则设置为默认值；返回最大活动请求次数。
     @staticmethod
     def _get_max_active_requests(app_model: App) -> int:
         max_active_requests = app_model.max_active_requests
@@ -122,6 +130,7 @@ class AppGenerateService:
             max_active_requests = int(dify_config.APP_MAX_ACTIVE_REQUESTS)
         return max_active_requests
 
+    # cdg: 生成单次迭代，具体实现为：如果应用模式为高级聊天，则获取工作流；如果应用模式为工作流，则获取工作流；否则抛出异常。
     @classmethod
     def generate_single_iteration(cls, app_model: App, user: Account, node_id: str, args: Any, streaming: bool = True):
         if app_model.mode == AppMode.ADVANCED_CHAT.value:
@@ -142,6 +151,7 @@ class AppGenerateService:
         else:
             raise ValueError(f"Invalid app mode {app_model.mode}")
 
+    # cdg: 生成更多类似，具体实现为：如果应用模式为完成，则生成更多类似；否则抛出异常。
     @classmethod
     def generate_more_like_this(
         cls,
@@ -164,6 +174,7 @@ class AppGenerateService:
             app_model=app_model, message_id=message_id, user=user, invoke_from=invoke_from, stream=streaming
         )
 
+    # cdg: 获取工作流，具体实现为：获取工作流服务；如果调用来源为调试，则获取当前草稿工作流；如果当前草稿工作流不存在，则抛出异常；如果调用来源为非调试，则获取当前发布工作流；如果当前发布工作流不存在，则抛出异常；返回工作流。
     @classmethod
     def _get_workflow(cls, app_model: App, invoke_from: InvokeFrom) -> Workflow:
         """
