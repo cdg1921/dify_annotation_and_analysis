@@ -12,12 +12,13 @@ from core.tools.entities.tool_entities import (
 from core.tools.errors import ToolNotFoundError, ToolParameterValidationError, ToolProviderCredentialValidationError
 from core.tools.tool.tool import Tool
 
-
+# cdg: 工具提供者控制器，包括工具提供者身份、工具列表和凭证模式。
 class ToolProviderController(BaseModel, ABC):
     identity: Optional[ToolProviderIdentity] = None
     tools: Optional[list[Tool]] = None
     credentials_schema: Optional[dict[str, ToolProviderCredentials]] = None
 
+    # cdg: 获取凭证模式
     def get_credentials_schema(self) -> dict[str, ToolProviderCredentials]:
         """
         returns the credentials schema of the provider
@@ -28,6 +29,7 @@ class ToolProviderController(BaseModel, ABC):
             return {}
         return self.credentials_schema.copy()
 
+    # cdg: 获取工具列表
     @abstractmethod
     def get_tools(self, user_id: str = "", tenant_id: str = "") -> Optional[list[Tool]]:
         """
@@ -37,6 +39,7 @@ class ToolProviderController(BaseModel, ABC):
         """
         pass
 
+    # cdg: 根据工具名称获取工具
     @abstractmethod
     def get_tool(self, tool_name: str) -> Optional[Tool]:
         """
@@ -46,6 +49,7 @@ class ToolProviderController(BaseModel, ABC):
         """
         pass
 
+    # cdg: 根据工具名称获取工具参数
     def get_parameters(self, tool_name: str) -> list[ToolParameter]:
         """
         returns the parameters of the tool
@@ -61,6 +65,7 @@ class ToolProviderController(BaseModel, ABC):
             raise ToolNotFoundError(f"tool {tool_name} not found")
         return tool.parameters or []
 
+    # cdg: 获取提供者类型
     @property
     def provider_type(self) -> ToolProviderType:
         """
@@ -70,6 +75,7 @@ class ToolProviderController(BaseModel, ABC):
         """
         return ToolProviderType.BUILT_IN
 
+    # cdg: 验证工具参数
     def validate_parameters(self, tool_id: int, tool_name: str, tool_parameters: dict[str, Any]) -> None:
         """
         validate the parameters of the tool and set the default value if needed
@@ -77,12 +83,14 @@ class ToolProviderController(BaseModel, ABC):
         :param tool_name: the name of the tool, defined in `get_tools`
         :param tool_parameters: the parameters of the tool
         """
+        # cdg: 获取工具参数模式
         tool_parameters_schema = self.get_parameters(tool_name)
 
         tool_parameters_need_to_validate: dict[str, ToolParameter] = {}
         for parameter in tool_parameters_schema:
             tool_parameters_need_to_validate[parameter.name] = parameter
 
+        # cdg: 验证工具参数
         for tool_parameter in tool_parameters:
             if tool_parameter not in tool_parameters_need_to_validate:
                 raise ToolParameterValidationError(f"parameter {tool_parameter} not found in tool {tool_name}")
@@ -133,6 +141,7 @@ class ToolProviderController(BaseModel, ABC):
             if parameter_schema.default is not None:
                 tool_parameters[tool_parameter_validate] = parameter_schema.type.cast_value(parameter_schema.default)
 
+    # cdg: 验证凭证格式
     def validate_credentials_format(self, credentials: dict[str, Any]) -> None:
         """
         validate the format of the credentials of the provider and set the default value if needed

@@ -13,6 +13,7 @@ from . import (
     message,
 )
 
+# cdg: 定义__all__，用于表示所有错误类。
 __all__ = [
     "account",
     "app",

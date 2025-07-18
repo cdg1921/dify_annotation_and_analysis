@@ -18,7 +18,7 @@ from models.tools import WorkflowToolProvider
 from models.workflow import Workflow
 from services.tools.tools_transform_service import ToolTransformService
 
-
+# cdg: 工作流工具管理服务
 class WorkflowToolManageService:
     """
     Service class for managing workflow tools.
@@ -38,8 +38,10 @@ class WorkflowToolManageService:
         privacy_policy: str = "",
         labels: Optional[list[str]] = None,
     ) -> dict:
+        # cdg: 检查参数配置
         WorkflowToolConfigurationUtils.check_parameter_configurations(parameters)
 
+        # cdg: 检查名称是否唯一
         # check if the name is unique
         existing_workflow_tool_provider = (
             db.session.query(WorkflowToolProvider)
@@ -50,18 +52,22 @@ class WorkflowToolManageService:
             )
             .first()
         )
-
+        # cdg: 如果名称或应用ID已存在，则抛出异常
         if existing_workflow_tool_provider is not None:
             raise ValueError(f"Tool with name {name} or app_id {workflow_app_id} already exists")
 
+        # cdg: 获取应用
         app = db.session.query(App).filter(App.id == workflow_app_id, App.tenant_id == tenant_id).first()
+        # cdg: 如果应用不存在，则抛出异常
         if app is None:
             raise ValueError(f"App {workflow_app_id} not found")
 
+        # cdg: 获取工作流
         workflow = app.workflow
         if workflow is None:
             raise ValueError(f"Workflow not found for app {workflow_app_id}")
 
+        # cdg: 创建工作流工具提供者
         workflow_tool_provider = WorkflowToolProvider(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -75,20 +81,24 @@ class WorkflowToolManageService:
             version=workflow.version,
         )
 
+        # cdg: 转换为控制器
         try:
             WorkflowToolProviderController.from_db(workflow_tool_provider)
         except Exception as e:
             raise ValueError(str(e))
 
+        # cdg: 工作流工具添加到数据库
         db.session.add(workflow_tool_provider)
         db.session.commit()
 
+        # cdg: 更新工具标签
         if labels is not None:
             ToolLabelManager.update_tool_labels(
                 ToolTransformService.workflow_provider_to_controller(workflow_tool_provider), labels
             )
         return {"result": "success"}
 
+    # cdg: 更新工作流工具
     @classmethod
     def update_workflow_tool(
         cls,
@@ -117,8 +127,10 @@ class WorkflowToolManageService:
         :param labels: labels
         :return: the updated tool
         """
+        # cdg: 检查参数配置
         WorkflowToolConfigurationUtils.check_parameter_configurations(parameters)
 
+        # cdg: 检查名称是否唯一
         # check if the name is unique
         existing_workflow_tool_provider = (
             db.session.query(WorkflowToolProvider)
@@ -129,23 +141,25 @@ class WorkflowToolManageService:
             )
             .first()
         )
-
+        # cdg: 如果名称已存在，则抛出异常
         if existing_workflow_tool_provider is not None:
             raise ValueError(f"Tool with name {name} already exists")
 
+        # cdg: 获取工作流工具提供者
         workflow_tool_provider: Optional[WorkflowToolProvider] = (
             db.session.query(WorkflowToolProvider)
             .filter(WorkflowToolProvider.tenant_id == tenant_id, WorkflowToolProvider.id == workflow_tool_id)
             .first()
         )
-
+        # cdg: 如果工作流工具提供者不存在，则抛出异常
         if workflow_tool_provider is None:
             raise ValueError(f"Tool {workflow_tool_id} not found")
 
+        # cdg: 获取应用（工作流工具提供者所属应用）
         app: Optional[App] = (
             db.session.query(App).filter(App.id == workflow_tool_provider.app_id, App.tenant_id == tenant_id).first()
         )
-
+        # cdg: 如果应用不存在，则抛出异常
         if app is None:
             raise ValueError(f"App {workflow_tool_provider.app_id} not found")
 
@@ -162,14 +176,17 @@ class WorkflowToolManageService:
         workflow_tool_provider.version = workflow.version
         workflow_tool_provider.updated_at = datetime.now()
 
+        # cdg: 转换为控制器
         try:
             WorkflowToolProviderController.from_db(workflow_tool_provider)
         except Exception as e:
             raise ValueError(str(e))
 
+        # cdg: 更新工作流工具提供者
         db.session.add(workflow_tool_provider)
         db.session.commit()
 
+        # cdg: 更新工具标签
         if labels is not None:
             ToolLabelManager.update_tool_labels(
                 ToolTransformService.workflow_provider_to_controller(workflow_tool_provider), labels
@@ -177,6 +194,7 @@ class WorkflowToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 列出指定租户工作流工具清单
     @classmethod
     def list_tenant_workflow_tools(cls, user_id: str, tenant_id: str) -> list[UserToolProvider]:
         """
@@ -185,28 +203,36 @@ class WorkflowToolManageService:
         :param tenant_id: the tenant id
         :return: the list of tools
         """
+        # cdg: 获取工作流工具提供者
         db_tools = db.session.query(WorkflowToolProvider).filter(WorkflowToolProvider.tenant_id == tenant_id).all()
-
+        # cdg: 获取工作流工具提供者
         tools = []
         for provider in db_tools:
             try:
+                # cdg: 首先将工作流工具提供者转换为控制器，并添加到工具列表
                 tools.append(ToolTransformService.workflow_provider_to_controller(provider))
             except:
                 # skip deleted tools
                 pass
 
+        # cdg: 获取工具标签
         labels = ToolLabelManager.get_tools_labels([t for t in tools if isinstance(t, ToolProviderController)])
-
+        # cdg: 结果列表
         result = []
-
+        # cdg: 遍历工具列表
         for tool in tools:
+            # cdg: 将工作流工具提供者转换为用户提供者
             user_tool_provider = ToolTransformService.workflow_provider_to_user_provider(
                 provider_controller=tool, labels=labels.get(tool.provider_id, [])
             )
+            # cdg: 重新打包提供者
             ToolTransformService.repack_provider(user_tool_provider)
+            # cdg: 获取工具
             to_user_tool: Optional[list[Tool]] = tool.get_tools(user_id, tenant_id)
+            # cdg: 如果工具不存在，则跳过
             if to_user_tool is None or len(to_user_tool) == 0:
                 continue
+            # cdg: 转换为工具
             user_tool_provider.tools = [
                 ToolTransformService.tool_to_user_tool(to_user_tool[0], labels=labels.get(tool.provider_id, []))
             ]
@@ -214,6 +240,7 @@ class WorkflowToolManageService:
 
         return result
 
+    # cdg: 删除工作流工具
     @classmethod
     def delete_workflow_tool(cls, user_id: str, tenant_id: str, workflow_tool_id: str) -> dict:
         """
@@ -230,6 +257,7 @@ class WorkflowToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 根据工具ID获取工作流工具
     @classmethod
     def get_workflow_tool_by_tool_id(cls, user_id: str, tenant_id: str, workflow_tool_id: str) -> dict:
         """
@@ -276,6 +304,7 @@ class WorkflowToolManageService:
             "privacy_policy": db_tool.privacy_policy,
         }
 
+    # cdg: 根据应用ID获取工作流工具
     @classmethod
     def get_workflow_tool_by_app_id(cls, user_id: str, tenant_id: str, workflow_app_id: str) -> dict:
         """
@@ -321,6 +350,7 @@ class WorkflowToolManageService:
             "privacy_policy": db_tool.privacy_policy,
         }
 
+    # cdg: 根据工具ID列出工作流工具
     @classmethod
     def list_single_workflow_tools(cls, user_id: str, tenant_id: str, workflow_tool_id: str) -> list[UserTool]:
         """

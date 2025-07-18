@@ -21,20 +21,23 @@ from services.tools.tools_transform_service import ToolTransformService
 
 logger = logging.getLogger(__name__)
 
-
+# cdg: 内置工具管理服务 
 class BuiltinToolManageService:
+    # cdg: 列出内置工具提供者工具
     @staticmethod
     def list_builtin_tool_provider_tools(user_id: str, tenant_id: str, provider: str) -> list[UserTool]:
         """
         list builtin tool provider tools
         """
+        # cdg: 获取内置工具提供者
         provider_controller: ToolProviderController = ToolManager.get_builtin_provider(provider)
+        # cdg: 获取工具列表
         tools = provider_controller.get_tools()
-
+        # cdg: 获取工具配置
         tool_provider_configurations = ToolConfigurationManager(
             tenant_id=tenant_id, provider_controller=provider_controller
         )
-        # check if user has added the provider
+        # cdg: 检查用户是否添加了提供者
         builtin_provider = (
             db.session.query(BuiltinToolProvider)
             .filter(
@@ -50,6 +53,7 @@ class BuiltinToolManageService:
             credentials = builtin_provider.credentials
             credentials = tool_provider_configurations.decrypt_tool_credentials(credentials)
 
+        # cdg: 转换工具为用户工具
         result: list[UserTool] = []
         for tool in tools or []:
             result.append(
@@ -63,6 +67,7 @@ class BuiltinToolManageService:
 
         return result
 
+    # cdg: 列出内置提供者凭证模式
     @staticmethod
     def list_builtin_provider_credentials_schema(provider_name):
         """
@@ -73,6 +78,7 @@ class BuiltinToolManageService:
         provider = ToolManager.get_builtin_provider(provider_name)
         return jsonable_encoder([v for _, v in (provider.credentials_schema or {}).items()])
 
+    # cdg: 更新内置工具提供者
     @staticmethod
     def update_builtin_tool_provider(
         session: Session, user_id: str, tenant_id: str, provider_name: str, credentials: dict
@@ -90,24 +96,28 @@ class BuiltinToolManageService:
         try:
             # get provider
             provider_controller = ToolManager.get_builtin_provider(provider_name)
+            # cdg: 如果提供者不需要凭证，则抛出异常
             if not provider_controller.need_credentials:
                 raise ValueError(f"provider {provider_name} does not need credentials")
             tool_configuration = ToolConfigurationManager(tenant_id=tenant_id, provider_controller=provider_controller)
-            # get original credentials if exists
+            # cdg: 如果提供者存在，则获取原始凭证
             if provider is not None:
                 original_credentials = tool_configuration.decrypt_tool_credentials(provider.credentials)
                 masked_credentials = tool_configuration.mask_tool_credentials(original_credentials)
                 # check if the credential has changed, save the original credential
+                # cdg: 检查凭证是否发生变化，如果发生变化，则保存原始凭证
                 for name, value in credentials.items():
                     if name in masked_credentials and value == masked_credentials[name]:
                         credentials[name] = original_credentials[name]
             # validate credentials
+
             provider_controller.validate_credentials(credentials)
             # encrypt credentials
             credentials = tool_configuration.encrypt_tool_credentials(credentials)
         except (ToolProviderNotFoundError, ToolNotFoundError, ToolProviderCredentialValidationError) as e:
             raise ValueError(str(e))
 
+        # cdg: 如果提供者不存在，则创建提供者信息，并保存到数据库
         if provider is None:
             # create provider
             provider = BuiltinToolProvider(
@@ -120,6 +130,7 @@ class BuiltinToolManageService:
             session.add(provider)
 
         else:
+            # cdg: 如果提供者存在，则更新凭证
             provider.encrypted_credentials = json.dumps(credentials)
 
             # delete cache
@@ -127,11 +138,13 @@ class BuiltinToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 获取内置工具提供者凭证
     @staticmethod
     def get_builtin_tool_provider_credentials(tenant_id: str, provider_name: str):
         """
         get builtin tool provider credentials
         """
+        # cdg: 获取内置工具提供者
         provider = (
             db.session.query(BuiltinToolProvider)
             .filter(
@@ -143,13 +156,17 @@ class BuiltinToolManageService:
 
         if provider is None:
             return {}
-
+        # cdg: 获取工具配置
         provider_controller = ToolManager.get_builtin_provider(provider.provider)
+        # cdg: 获取工具配置
         tool_configuration = ToolConfigurationManager(tenant_id=tenant_id, provider_controller=provider_controller)
+        # cdg: 解密凭证
         credentials = tool_configuration.decrypt_tool_credentials(provider.credentials)
+        # cdg: 掩码凭证，即中间加星号
         credentials = tool_configuration.mask_tool_credentials(credentials)
         return credentials
 
+    # cdg: 删除内置工具提供者
     @staticmethod
     def delete_builtin_tool_provider(user_id: str, tenant_id: str, provider_name: str):
         """
@@ -177,6 +194,7 @@ class BuiltinToolManageService:
 
         return {"result": "success"}
 
+    # cdg: 获取内置工具提供者图标
     @staticmethod
     def get_builtin_tool_provider_icon(provider: str):
         """
@@ -187,6 +205,7 @@ class BuiltinToolManageService:
 
         return icon_bytes, mime_type
 
+    # cdg: 列出内置工具
     @staticmethod
     def list_builtin_tools(user_id: str, tenant_id: str) -> list[UserToolProvider]:
         """

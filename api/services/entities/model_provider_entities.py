@@ -20,7 +20,7 @@ from core.model_runtime.entities.provider_entities import (
 )
 from models.provider import ProviderQuotaType, ProviderType
 
-
+# cdg: 定义CustomConfigurationStatus枚举类，用于表示自定义配置状态。
 class CustomConfigurationStatus(Enum):
     """
     Enum class for custom configuration status.
@@ -29,7 +29,7 @@ class CustomConfigurationStatus(Enum):
     ACTIVE = "active"
     NO_CONFIGURE = "no-configure"
 
-
+# cdg: 定义CustomConfigurationResponse类，用于表示自定义配置响应。
 class CustomConfigurationResponse(BaseModel):
     """
     Model class for provider custom configuration response.
@@ -37,7 +37,7 @@ class CustomConfigurationResponse(BaseModel):
 
     status: CustomConfigurationStatus
 
-
+# cdg: 定义SystemConfigurationResponse类，用于表示系统配置响应。
 class SystemConfigurationResponse(BaseModel):
     """
     Model class for provider system configuration response.
@@ -47,7 +47,7 @@ class SystemConfigurationResponse(BaseModel):
     current_quota_type: Optional[ProviderQuotaType] = None
     quota_configurations: list[QuotaConfiguration] = []
 
-
+# cdg: 定义ProviderResponse类，用于表示提供商响应。
 class ProviderResponse(BaseModel):
     """
     Model class for provider response.
@@ -85,7 +85,7 @@ class ProviderResponse(BaseModel):
                 en_US=f"{url_prefix}/icon_large/en_US", zh_Hans=f"{url_prefix}/icon_large/zh_Hans"
             )
 
-
+# cdg: 定义ProviderWithModelsResponse类，用于表示提供商模型响应。
 class ProviderWithModelsResponse(BaseModel):
     """
     Model class for provider with models response.
@@ -112,7 +112,7 @@ class ProviderWithModelsResponse(BaseModel):
                 en_US=f"{url_prefix}/icon_large/en_US", zh_Hans=f"{url_prefix}/icon_large/zh_Hans"
             )
 
-
+# cdg: 定义SimpleProviderEntityResponse类，用于表示简单提供商实体响应。
 class SimpleProviderEntityResponse(SimpleProviderEntity):
     """
     Simple provider entity response.
@@ -132,7 +132,7 @@ class SimpleProviderEntityResponse(SimpleProviderEntity):
                 en_US=f"{url_prefix}/icon_large/en_US", zh_Hans=f"{url_prefix}/icon_large/zh_Hans"
             )
 
-
+# cdg: 定义DefaultModelResponse类，用于表示默认模型响应。
 class DefaultModelResponse(BaseModel):
     """
     Default model entity.
@@ -145,7 +145,7 @@ class DefaultModelResponse(BaseModel):
     # pydantic configs
     model_config = ConfigDict(protected_namespaces=())
 
-
+# cdg: 定义ModelWithProviderEntityResponse类，用于表示模型提供商实体响应。
 class ModelWithProviderEntityResponse(ModelWithProviderEntity):
     """
     Model with provider entity.
