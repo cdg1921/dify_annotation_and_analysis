@@ -24,8 +24,9 @@ from models.tools import ApiToolProvider
 from services.tag_service import TagService
 from tasks.remove_app_and_related_data_task import remove_app_and_related_data_task
 
-
+# cdg: 应用服务，包括获取应用列表、创建应用、获取应用、更新应用、更新应用名称、更新应用图标、更新应用站点状态、更新应用API状态、删除应用、获取应用元数据。
 class AppService:
+    # cdg: 获取应用列表，具体实现为：获取应用列表；如果应用列表不存在，则返回None。
     def get_paginate_apps(self, user_id: str, tenant_id: str, args: dict) -> Pagination | None:
         """
         Get app list with pagination
@@ -35,7 +36,8 @@ class AppService:
         :return:
         """
         filters = [App.tenant_id == tenant_id, App.is_universal == False]
-
+        
+        # cdg: 根据应用模式过滤应用列表
         if args["mode"] == "workflow":
             filters.append(App.mode.in_([AppMode.WORKFLOW.value, AppMode.COMPLETION.value]))
         elif args["mode"] == "chat":
@@ -66,6 +68,7 @@ class AppService:
 
         return app_models
 
+    # cdg: 创建应用
     def create_app(self, tenant_id: str, args: dict, account: Account) -> App:
         """
         Create app
@@ -154,6 +157,7 @@ class AppService:
 
         return app
 
+    # cdg: 获取应用
     def get_app(self, app: App) -> App:
         """
         Get App
@@ -213,6 +217,7 @@ class AppService:
 
         return app
 
+    # cdg: 更新应用
     def update_app(self, app: App, args: dict) -> App:
         """
         Update app
@@ -236,6 +241,7 @@ class AppService:
             rate_limit.flush_cache(use_local_value=True)
         return app
 
+    # cdg: 更新应用名称
     def update_app_name(self, app: App, name: str) -> App:
         """
         Update app name
@@ -250,6 +256,7 @@ class AppService:
 
         return app
 
+    # cdg: 更新应用图标
     def update_app_icon(self, app: App, icon: str, icon_background: str) -> App:
         """
         Update app icon
@@ -266,6 +273,7 @@ class AppService:
 
         return app
 
+    # cdg: 更新应用站点状态
     def update_app_site_status(self, app: App, enable_site: bool) -> App:
         """
         Update app site status
@@ -283,6 +291,7 @@ class AppService:
 
         return app
 
+    # cdg: 更新应用API状态
     def update_app_api_status(self, app: App, enable_api: bool) -> App:
         """
         Update app api status
@@ -300,6 +309,7 @@ class AppService:
 
         return app
 
+    # cdg: 删除应用
     def delete_app(self, app: App) -> None:
         """
         Delete app
@@ -308,9 +318,17 @@ class AppService:
         db.session.delete(app)
         db.session.commit()
 
+        # cdg: 触发异步任务删除应用和相关数据
         # Trigger asynchronous deletion of app and related data
         remove_app_and_related_data_task.delay(tenant_id=app.tenant_id, app_id=app.id)
 
+    # cdg: 获取应用元数据，具体实现过程为：
+    # 1. 获取应用模式
+    # 2. 初始化应用元数据
+    # 3. 如果应用模式为高级聊天或工作流，则获取工作流图
+    # 4. 如果应用模式为高级聊天或工作流，则获取工作流图的节点
+    # 5. 如果应用模式为高级聊天或工作流，则获取工作流图的节点数据
+    # 6. 如果应用模式为高级聊天或工作流，则获取工作流图的节点数据
     def get_app_meta(self, app_model: App) -> dict:
         """
         Get app meta info
