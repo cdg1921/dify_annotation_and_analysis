@@ -4,6 +4,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
+# cdg: 腾讯云COS存储配置信息
 class TencentCloudCOSStorageConfig(BaseSettings):
     """
     Configuration settings for Tencent Cloud Object Storage (COS)

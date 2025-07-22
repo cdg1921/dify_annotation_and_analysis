@@ -67,25 +67,32 @@ REFRESH_TOKEN_PREFIX = "refresh_token:"
 ACCOUNT_REFRESH_TOKEN_PREFIX = "account_refresh_token:"
 REFRESH_TOKEN_EXPIRY = timedelta(days=dify_config.REFRESH_TOKEN_EXPIRE_DAYS)
 
-
+# cdg: 账户服务
 class AccountService:
+    # cdg: 重置密码速率限速器   
     reset_password_rate_limiter = RateLimiter(prefix="reset_password_rate_limit", max_attempts=1, time_window=60 * 1)
+    # cdg: 邮箱验证码登录速率限速器
     email_code_login_rate_limiter = RateLimiter(
         prefix="email_code_login_rate_limit", max_attempts=1, time_window=60 * 1
     )
+    # cdg: 邮箱验证码账户删除速率限速器
     email_code_account_deletion_rate_limiter = RateLimiter(
         prefix="email_code_account_deletion_rate_limit", max_attempts=1, time_window=60 * 1
     )
+    # cdg: 登录最大错误次数
     LOGIN_MAX_ERROR_LIMITS = 5
 
+    # cdg: 获取刷新令牌键
     @staticmethod
     def _get_refresh_token_key(refresh_token: str) -> str:
         return f"{REFRESH_TOKEN_PREFIX}{refresh_token}"
 
+    # cdg: 获取账户刷新令牌键
     @staticmethod
     def _get_account_refresh_token_key(account_id: str) -> str:
         return f"{ACCOUNT_REFRESH_TOKEN_PREFIX}{account_id}"
 
+    # cdg: 存储刷新令牌
     @staticmethod
     def _store_refresh_token(refresh_token: str, account_id: str) -> None:
         redis_client.setex(AccountService._get_refresh_token_key(refresh_token), REFRESH_TOKEN_EXPIRY, account_id)
@@ -93,40 +100,52 @@ class AccountService:
             AccountService._get_account_refresh_token_key(account_id), REFRESH_TOKEN_EXPIRY, refresh_token
         )
 
+    # cdg: 删除刷新令牌
     @staticmethod
     def _delete_refresh_token(refresh_token: str, account_id: str) -> None:
         redis_client.delete(AccountService._get_refresh_token_key(refresh_token))
         redis_client.delete(AccountService._get_account_refresh_token_key(account_id))
 
+    # cdg: 加载用户
     @staticmethod
     def load_user(user_id: str) -> None | Account:
+        # cdg: 通过用户ID从数据库中获取账户
         account = Account.query.filter_by(id=user_id).first()
+        # cdg: 如果账户不存在，则返回None
         if not account:
             return None
 
+        # cdg: 如果账户被禁用，则抛出异常
         if account.status == AccountStatus.BANNED.value:
             raise Unauthorized("Account is banned.")
 
+        # cdg: 获取当前租户
         current_tenant = TenantAccountJoin.query.filter_by(account_id=account.id, current=True).first()
         if current_tenant:
+            # cdg: 设置当前租户ID
             account.current_tenant_id = current_tenant.tenant_id
         else:
+            # cdg: 获取当前租户
             available_ta = (
                 TenantAccountJoin.query.filter_by(account_id=account.id).order_by(TenantAccountJoin.id.asc()).first()
             )
             if not available_ta:
+                # cdg: 如果当前租户不存在，则返回None
                 return None
 
+            # cdg: 设置当前租户ID
             account.current_tenant_id = available_ta.tenant_id
             available_ta.current = True
             db.session.commit()
 
+        # cdg: 如果最后活跃时间大于10分钟，则更新最后活跃时间
         if datetime.now(UTC).replace(tzinfo=None) - account.last_active_at > timedelta(minutes=10):
             account.last_active_at = datetime.now(UTC).replace(tzinfo=None)
             db.session.commit()
 
         return cast(Account, account)
-
+    
+    # cdg: 获取账户JWT令牌。jwt,全称json web token,是一种开放标准，用于在网络应用环境间传递声明，实现无状态的认证和授权。
     @staticmethod
     def get_account_jwt_token(account: Account) -> str:
         exp_dt = datetime.now(UTC) + timedelta(minutes=dify_config.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -138,20 +157,26 @@ class AccountService:
             "sub": "Console API Passport",
         }
 
+        # cdg: jwt令牌的组成包含用户ID、过期时间、发行者、主题。
+        # cdg: 颁发JWT令牌
         token: str = PassportService().issue(payload)
         return token
 
+    # cdg: 账户授权，具体实现为：通过邮箱从数据库中获取账户，如果账户不存在，则抛出异常；如果账户被禁用，则抛出异常；如果密码和邀请令牌存在，且账户密码为空，则设置密码和密码盐；如果账户状态为待激活，则设置为激活；提交数据库。
     @staticmethod
     def authenticate(email: str, password: str, invite_token: Optional[str] = None) -> Account:
         """authenticate account with email and password"""
-
+        # cdg: 通过邮箱从数据库中获取账户
         account = Account.query.filter_by(email=email).first()
+        # cdg: 如果账户不存在，则抛出异常
         if not account:
             raise AccountNotFoundError()
 
+        # cdg: 如果账户被禁用，则抛出异常
         if account.status == AccountStatus.BANNED.value:
             raise AccountLoginError("Account is banned.")
 
+        # cdg: 如果密码和邀请令牌存在，且账户密码为空，则设置密码和密码盐
         if password and invite_token and account.password is None:
             # if invite_token is valid, set password and password_salt
             salt = secrets.token_bytes(16)
@@ -164,6 +189,7 @@ class AccountService:
         if account.password is None or not compare_password(password, account.password, account.password_salt):
             raise AccountPasswordError("Invalid email or password.")
 
+        # cdg: 如果账户状态为待激活，则设置为激活
         if account.status == AccountStatus.PENDING.value:
             account.status = AccountStatus.ACTIVE.value
             account.initialized_at = datetime.now(UTC).replace(tzinfo=None)
@@ -172,6 +198,7 @@ class AccountService:
 
         return cast(Account, account)
 
+    # cdg: 更新账户密码，具体实现为：如果账户密码存在，且密码不正确，则抛出异常；如果新密码不合法，则抛出异常；生成密码加盐；加密密码；设置密码和密码加盐；提交数据库。
     @staticmethod
     def update_account_password(account, password, new_password):
         """update account password"""
@@ -182,9 +209,10 @@ class AccountService:
         valid_password(new_password)
 
         # generate password salt
+        # cdg: 生成密码加盐
         salt = secrets.token_bytes(16)
         base64_salt = base64.b64encode(salt).decode()
-
+        # cdg: 加密密码
         # encrypt password with salt
         password_hashed = hash_password(new_password, salt)
         base64_password_hashed = base64.b64encode(password_hashed).decode()
@@ -193,6 +221,7 @@ class AccountService:
         db.session.commit()
         return account
 
+    # cdg: 创建账户，具体实现为：如果系统功能允许注册，且不是从仪表板创建，则抛出异常；如果账户邮箱在冻结列表中，则抛出异常；创建账户；如果密码存在，则生成密码加盐；加密密码；设置密码和密码加盐；提交数据库。
     @staticmethod
     def create_account(
         email: str,
@@ -203,11 +232,13 @@ class AccountService:
         is_setup: Optional[bool] = False,
     ) -> Account:
         """create account"""
+
+        # cdg: 如果系统功能不允许注册，且不是从仪表板创建，则抛出异常
         if not FeatureService.get_system_features().is_allow_register and not is_setup:
             from controllers.console.error import AccountNotFound
 
             raise AccountNotFound()
-
+        # cdg: 如果账单功能启用，且账户邮箱在冻结列表中，则抛出异常
         if dify_config.BILLING_ENABLED and BillingService.is_email_in_freeze(email):
             raise AccountRegisterError(
                 description=(
@@ -215,26 +246,28 @@ class AccountService:
                     "30 days and is temporarily unavailable for new account registration"
                 )
             )
-
+        # cdg: 创建账户
         account = Account()
         account.email = email
         account.name = name
-
+        # cdg: 如果密码存在，则生成密码加盐
         if password:
-            # generate password salt
+            # cdg: 生成密码加盐
             salt = secrets.token_bytes(16)
             base64_salt = base64.b64encode(salt).decode()
 
             # encrypt password with salt
+            # cdg: 加密密码
             password_hashed = hash_password(password, salt)
             base64_password_hashed = base64.b64encode(password_hashed).decode()
-
+            # cdg: 设置密码和密码加盐
             account.password = base64_password_hashed
             account.password_salt = base64_salt
 
         account.interface_language = interface_language
         account.interface_theme = interface_theme
 
+        # cdg: 根据语言设置时区
         # Set timezone based on language
         account.timezone = language_timezone_mapping.get(interface_language, "UTC")
 
@@ -242,6 +275,7 @@ class AccountService:
         db.session.commit()
         return account
 
+    # cdg: 创建账户和租户，具体实现为：创建账户；创建租户；提交数据库。
     @staticmethod
     def create_account_and_tenant(
         email: str, name: str, interface_language: str, password: Optional[str] = None
@@ -255,6 +289,7 @@ class AccountService:
 
         return account
 
+    # cdg: 生成账户删除验证码，具体实现为：生成6位随机数；生成令牌；返回令牌和验证码。
     @staticmethod
     def generate_account_deletion_verification_code(account: Account) -> tuple[str, str]:
         code = "".join([str(random.randint(0, 9)) for _ in range(6)])
@@ -263,6 +298,7 @@ class AccountService:
         )
         return token, code
 
+    # cdg: 发送账户删除验证码，具体实现为：如果账户邮箱在删除验证码速率限速器中，则抛出异常；发送删除验证码；增加删除验证码速率限速器。
     @classmethod
     def send_account_deletion_verification_email(cls, account: Account, code: str):
         email = account.email
@@ -275,6 +311,7 @@ class AccountService:
 
         cls.email_code_account_deletion_rate_limiter.increment_rate_limit(email)
 
+    # cdg: 验证账户删除验证码，具体实现为：获取令牌数据；如果令牌数据不存在，则返回False；如果令牌数据中的验证码不等于传入的验证码，则返回False；返回True。
     @staticmethod
     def verify_account_deletion_code(token: str, code: str) -> bool:
         token_data = TokenManager.get_token_data(token, "account_deletion")
@@ -286,11 +323,13 @@ class AccountService:
 
         return True
 
+    # cdg: 删除账户，具体实现为：添加删除账户任务。
     @staticmethod
     def delete_account(account: Account) -> None:
         """Delete account. This method only adds a task to the queue for deletion."""
         delete_account_task.delay(account.id)
 
+    # cdg: 链接账户集成，具体实现为：查询是否存在相同提供者的绑定记录；如果存在，则更新记录；如果不存在，则创建新记录；提交数据库。
     @staticmethod
     def link_account_integrate(provider: str, open_id: str, account: Account) -> None:
         """Link account integrate"""

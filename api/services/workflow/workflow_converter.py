@@ -26,7 +26,11 @@ from models.api_based_extension import APIBasedExtension, APIBasedExtensionPoint
 from models.model import App, AppMode, AppModelConfig
 from models.workflow import Workflow, WorkflowType
 
+<<<<<<< HEAD
 # cdg: 定义WorkflowConverter类，用于将App转换为Workflow模式。
+=======
+# cdg: 工作流转换器
+>>>>>>> 5178557d5a4d245873ff699af1d6ce48fba3087e
 class WorkflowConverter:
     """
     App Convert to Workflow Mode

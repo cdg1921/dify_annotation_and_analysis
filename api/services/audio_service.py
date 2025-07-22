@@ -22,7 +22,7 @@ ALLOWED_EXTENSIONS = ["mp3", "mp4", "mpeg", "mpga", "m4a", "wav", "webm", "amr"]
 
 logger = logging.getLogger(__name__)
 
-
+# cdg: 音频服务，包括转录ASR、转录TTS、转录TTS语音。
 class AudioService:
     @classmethod
     def transcript_asr(cls, app_model: App, file: FileStorage, end_user: Optional[str] = None):

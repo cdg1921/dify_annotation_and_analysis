@@ -19,8 +19,9 @@ from tasks.annotation.disable_annotation_reply_task import disable_annotation_re
 from tasks.annotation.enable_annotation_reply_task import enable_annotation_reply_task
 from tasks.annotation.update_annotation_to_index_task import update_annotation_to_index_task
 
-
+# cdg: 应用注释服务，包括插入应用注释、启用应用注释、禁用应用注释、获取应用注释列表、导出应用注释列表、直接插入应用注释、更新应用注释、删除应用注释、批量导入应用注释、获取应用注释命中历史、获取应用注释、添加应用注释历史、获取应用注释设置、更新应用注释设置。
 class AppAnnotationService:
+    # cdg: 插入应用注释，具体实现为：获取应用信息；如果消息ID存在，则获取消息信息；如果消息存在，则获取消息注释；如果消息注释存在，则更新消息注释；否则创建消息注释；如果注释回复启用，则添加注释到索引。
     @classmethod
     def up_insert_app_annotation_from_message(cls, args: dict, app_id: str) -> MessageAnnotation:
         # get app info
@@ -74,6 +75,7 @@ class AppAnnotationService:
             )
         return cast(MessageAnnotation, annotation)
 
+    # cdg: 启用应用注释，具体实现为：如果应用注释启用缓存存在，则返回缓存结果；否则异步添加注释到索引。
     @classmethod
     def enable_app_annotation(cls, args: dict, app_id: str) -> dict:
         enable_app_annotation_key = "enable_app_annotation_{}".format(str(app_id))
@@ -97,6 +99,7 @@ class AppAnnotationService:
         )
         return {"job_id": job_id, "job_status": "waiting"}
 
+    # cdg: 禁用应用注释，具体实现为：如果应用注释禁用缓存存在，则返回缓存结果；否则异步添加注释到索引。
     @classmethod
     def disable_app_annotation(cls, app_id: str) -> dict:
         disable_app_annotation_key = "disable_app_annotation_{}".format(str(app_id))
@@ -112,6 +115,7 @@ class AppAnnotationService:
         disable_annotation_reply_task.delay(str(job_id), app_id, current_user.current_tenant_id)
         return {"job_id": job_id, "job_status": "waiting"}
 
+    # cdg: 获取应用注释列表，具体实现为：获取应用信息；如果应用不存在，则抛出异常；如果关键字存在，则获取应用注释列表；否则获取应用注释列表。
     @classmethod
     def get_annotation_list_by_app_id(cls, app_id: str, page: int, limit: int, keyword: str):
         # get app info
@@ -143,6 +147,7 @@ class AppAnnotationService:
             )
         return annotations.items, annotations.total
 
+    # cdg: 导出应用注释列表，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释列表。
     @classmethod
     def export_annotation_list_by_app_id(cls, app_id: str):
         # get app info
@@ -162,6 +167,7 @@ class AppAnnotationService:
         )
         return annotations
 
+    # cdg: 直接插入应用注释，具体实现为：获取应用信息；如果应用不存在，则抛出异常；创建应用注释；如果注释回复启用，则添加注释到索引。
     @classmethod
     def insert_app_annotation_directly(cls, args: dict, app_id: str) -> MessageAnnotation:
         # get app info
@@ -193,6 +199,7 @@ class AppAnnotationService:
             )
         return annotation
 
+    # cdg: 更新应用注释，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释；如果应用注释不存在，则抛出异常；更新应用注释；如果注释回复启用，则添加注释到索引。
     @classmethod
     def update_app_annotation_directly(cls, args: dict, app_id: str, annotation_id: str):
         # get app info
@@ -230,6 +237,7 @@ class AppAnnotationService:
 
         return annotation
 
+    # cdg: 删除应用注释，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释；如果应用注释不存在，则抛出异常；删除应用注释；删除应用注释命中历史；如果注释回复启用，则删除注释索引。
     @classmethod
     def delete_app_annotation(cls, app_id: str, annotation_id: str):
         # get app info
@@ -269,6 +277,7 @@ class AppAnnotationService:
                 annotation.id, app_id, current_user.current_tenant_id, app_annotation_setting.collection_binding_id
             )
 
+    # cdg: 批量导入应用注释，具体实现为：获取应用信息；如果应用不存在，则抛出异常；读取CSV文件；如果CSV文件为空，则抛出异常；检查注释限制；异步添加注释到索引。
     @classmethod
     def batch_import_app_annotations(cls, app_id, file: FileStorage) -> dict:
         # get app info
@@ -308,6 +317,7 @@ class AppAnnotationService:
             return {"error_msg": str(e)}
         return {"job_id": job_id, "job_status": "waiting"}
 
+    # cdg: 获取应用注释命中历史，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释；如果应用注释不存在，则抛出异常；获取应用注释命中历史。
     @classmethod
     def get_annotation_hit_histories(cls, app_id: str, annotation_id: str, page, limit):
         # get app info
@@ -335,6 +345,7 @@ class AppAnnotationService:
         )
         return annotation_hit_histories.items, annotation_hit_histories.total
 
+    # cdg: 获取应用注释，具体实现为：获取应用注释；如果应用注释不存在，则返回None。
     @classmethod
     def get_annotation_by_id(cls, annotation_id: str) -> MessageAnnotation | None:
         annotation = db.session.query(MessageAnnotation).filter(MessageAnnotation.id == annotation_id).first()
@@ -343,6 +354,7 @@ class AppAnnotationService:
             return None
         return annotation
 
+    # cdg: 添加应用注释历史，具体实现为：获取应用注释；如果应用注释不存在，则返回None。
     @classmethod
     def add_annotation_history(
         cls,
@@ -375,6 +387,7 @@ class AppAnnotationService:
         db.session.add(annotation_hit_history)
         db.session.commit()
 
+    # cdg: 根据应用ID获取应用注释设置，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释设置；如果应用注释设置存在，则获取应用注释设置的集合绑定详情；返回应用注释设置。
     @classmethod
     def get_app_annotation_setting_by_app_id(cls, app_id: str):
         # get app info
@@ -403,6 +416,7 @@ class AppAnnotationService:
             }
         return {"enabled": False}
 
+    # cdg: 更新应用注释设置，具体实现为：获取应用信息；如果应用不存在，则抛出异常；获取应用注释设置；如果应用注释设置不存在，则抛出异常；更新应用注释设置；获取应用注释设置的集合绑定详情；返回应用注释设置。
     @classmethod
     def update_app_annotation_setting(cls, app_id: str, annotation_setting_id: str, args: dict):
         # get app info
@@ -442,3 +456,17 @@ class AppAnnotationService:
                 "embedding_model_name": collection_binding_detail.model_name,
             },
         }
+
+
+
+# cdg: 这份代码是应用注释服务，包括插入应用注释、启用应用注释、禁用应用注释、获取应用注释列表、导出应用注释列表、直接插入应用注释、更新应用注释、删除应用注释、批量导入应用注释、获取应用注释命中历史、获取应用注释、添加应用注释历史、获取应用注释设置、更新应用注释设置。
+# cdg: 其中用到的一些关键技术点：
+# cdg: 1. 使用Flask-Login获取当前用户信息。
+# cdg: 2. 使用SQLAlchemy进行数据库操作。
+# cdg: 3. 使用Redis进行缓存。
+# cdg: 4. 使用Celery进行异步任务。
+# cdg: 5. 使用Pandas进行CSV文件操作。
+# cdg: 6. 使用Werkzeug进行文件上传。
+# cdg: 7. 使用Werkzeug进行异常处理。
+# cdg: 8. 使用Werkzeug进行HTTP请求。
+# cdg: 9. 使用Werkzeug进行HTTP响应。
