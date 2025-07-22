@@ -26,12 +26,13 @@ from models.api_based_extension import APIBasedExtension, APIBasedExtensionPoint
 from models.model import App, AppMode, AppModelConfig
 from models.workflow import Workflow, WorkflowType
 
-
+# cdg: 定义WorkflowConverter类，用于将App转换为Workflow模式。
 class WorkflowConverter:
     """
     App Convert to Workflow Mode
     """
 
+    # cdg: 将Chatbot App转换为Workflow模式
     def convert_to_workflow(
         self, app_model: App, account: Account, name: str, icon_type: str, icon: str, icon_background: str
     ):
@@ -60,6 +61,7 @@ class WorkflowConverter:
             app_model=app_model, app_model_config=app_model.app_model_config, account_id=account.id
         )
 
+        # cdg: 创建新的App实例,用于存储转换后的工作流
         # create new app
         new_app = App()
         new_app.tenant_id = app_model.tenant_id
@@ -83,6 +85,7 @@ class WorkflowConverter:
         workflow.app_id = new_app.id
         db.session.commit()
 
+        # cdg: 发送app-was-created信号，通知所有连接的接收器
         app_was_created.send(new_app, account=account)
 
         return new_app
@@ -103,14 +106,15 @@ class WorkflowConverter:
         # init workflow graph
         graph: dict[str, Any] = {"nodes": [], "edges": []}
 
+        # cdg: 需要转换的内容列表
         # Convert list:
-        # - variables -> start
-        # - model_config -> llm
-        # - prompt_template -> llm
-        # - file_upload -> llm
-        # - external_data_variables -> http-request
-        # - dataset -> knowledge-retrieval
-        # - show_retrieve_source -> knowledge-retrieval
+        # - variables -> start                                  #cdg: 工作流变量转换为开始节点
+        # - model_config -> llm                                 #cdg: 模型配置转换为LLM节点
+        # - prompt_template -> llm                              #cdg: 提示词模板转换为LLM节点
+        # - file_upload -> llm                                  #cdg: 文件上传转换为LLM节点
+        # - external_data_variables -> http-request             #cdg: 外部数据变量转换为HTTP请求节点
+        # - dataset -> knowledge-retrieval                      #cdg: 数据集转换为知识检索节点 
+        # - show_retrieve_source -> knowledge-retrieval         #cdg: 显示检索源转换为知识检索节点
 
         # convert to start node
         start_node = self._convert_to_start_node(variables=app_config.variables)
