@@ -24,6 +24,16 @@ logger = logging.getLogger(__name__)
 
 # cdg: 音频服务，包括转录ASR、转录TTS、转录TTS语音。
 class AudioService:
+
+    # cdg: 转录ASR，将音频文件转换为文本。具体实现思路：
+    # 1.检查应用模式，如果应用模式为高级聊天或工作流，则检查工作流是否启用ASR。
+    # 2.如果应用模式为普通聊天，则检查应用模型配置是否启用ASR。
+    # 3.检查文件是否为空，如果为空，则抛出NoAudioUploadedServiceError异常。
+    # 4.检查文件扩展名是否为允许的扩展名，如果不允许，则抛出UnsupportedAudioTypeServiceError异常。
+    # 5.检查文件大小是否超过限制。
+    # 6.获取默认模型实例，如果模型实例为空，则抛出ProviderNotSupportSpeechToTextServiceError异常。
+    # 7.通过Modelmanager获取默认ASR模型实例，调用ASR模型实例的invoke_speech2text方法，将音频文件转换为文本。
+    # 8.返回文本。
     @classmethod
     def transcript_asr(cls, app_model: App, file: FileStorage, end_user: Optional[str] = None):
         if app_model.mode in {AppMode.ADVANCED_CHAT.value, AppMode.WORKFLOW.value}:
@@ -66,6 +76,16 @@ class AudioService:
 
         return {"text": model_instance.invoke_speech2text(file=buffer, user=end_user)}
 
+    # cdg: 转录TTS，将文本转换为语音。具体实现思路：
+    # 1.检查应用模式，如果应用模式为高级聊天或工作流，则检查工作流是否启用TTS。
+    # 2.如果应用模式为普通聊天，则检查应用模型配置是否启用TTS。
+    # 3.检查文本是否为空，如果为空，则抛出ValueError异常。
+    # 4.检查语音是否为空，如果为空，则抛出ValueError异常。
+    # 5.检查应用模型配置是否为空，如果为空，则抛出ValueError异常。
+    # 6.检查应用模型配置是否启用TTS，如果未启用，则抛出ValueError异常。
+    # 7.获取默认模型实例，如果模型实例为空，则抛出ProviderNotSupportTextToSpeechServiceError异常。
+    # 8.通过Modelmanager获取默认TTS模型实例，调用TTS模型实例的invoke_tts方法，将文本转换为语音。
+    # 9.返回语音。
     @classmethod
     def transcript_tts(
         cls,
@@ -148,6 +168,10 @@ class AudioService:
                 return Response(stream_with_context(response), content_type="audio/mpeg")
             return response
 
+    # cdg: 获取TTS语音列表。具体实现思路：
+    # 1.获取默认模型实例，如果模型实例为空，则抛出ProviderNotSupportTextToSpeechServiceError异常。
+    # 2.通过Modelmanager获取默认TTS模型实例，调用TTS模型实例的get_tts_voices方法，获取TTS语音列表。
+    # 3.返回TTS语音列表。
     @classmethod
     def transcript_tts_voices(cls, tenant_id: str, language: str):
         model_manager = ModelManager()

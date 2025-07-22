@@ -14,8 +14,9 @@ from models.model import App, Conversation, EndUser, Message
 from services.errors.conversation import ConversationNotExistsError, LastConversationNotExistsError
 from services.errors.message import MessageNotExistsError
 
-
+# cdg: 会话服务，用于处理会话的创建、删除、重命名、自动生成名称、获取会话、删除会话。
 class ConversationService:
+    # cdg: 分页获取会话。
     @classmethod
     def pagination_by_last_id(
         cls,
@@ -79,12 +80,14 @@ class ConversationService:
 
         return InfiniteScrollPagination(data=conversations, limit=limit, has_more=has_more)
 
+    # cdg: 获取排序参数。
     @classmethod
     def _get_sort_params(cls, sort_by: str):
         if sort_by.startswith("-"):
             return sort_by[1:], desc
         return sort_by, asc
 
+    # cdg: 构建过滤条件。
     @classmethod
     def _build_filter_condition(cls, sort_field: str, sort_direction: Callable, reference_conversation: Conversation):
         field_value = getattr(reference_conversation, sort_field)
@@ -93,6 +96,7 @@ class ConversationService:
         else:
             return getattr(Conversation, sort_field) > field_value
 
+    # cdg: 重命名会话。
     @classmethod
     def rename(
         cls,
@@ -113,6 +117,7 @@ class ConversationService:
 
         return conversation
 
+    # cdg: 自动生成会话名称。
     @classmethod
     def auto_generate_name(cls, app_model: App, conversation: Conversation):
         # get conversation first message

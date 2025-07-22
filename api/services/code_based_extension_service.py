@@ -1,7 +1,9 @@
 from extensions.ext_code_based_extension import code_based_extension
 
 
+# cdg: 代码扩展服务，用于获取代码扩展。
 class CodeBasedExtensionService:
+    # cdg: 获取代码扩展。
     @staticmethod
     def get_code_based_extension(module: str) -> list[dict]:
         module_extensions = code_based_extension.module_extensions(module)
