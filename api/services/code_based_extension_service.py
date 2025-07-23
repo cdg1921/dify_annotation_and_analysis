@@ -7,6 +7,8 @@ class CodeBasedExtensionService:
     @staticmethod
     def get_code_based_extension(module: str) -> list[dict]:
         module_extensions = code_based_extension.module_extensions(module)
+
+        # cdg: 返回代码扩展列表，过滤掉内置的代码扩展。
         return [
             {
                 "name": module_extension.name,

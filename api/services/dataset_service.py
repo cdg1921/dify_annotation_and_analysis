@@ -69,16 +69,24 @@ from tasks.retry_document_indexing_task import retry_document_indexing_task
 from tasks.sync_website_document_indexing_task import sync_website_document_indexing_task
 
 
+# cdg: 数据集（即知识库）调用接口服务，用于处理知识库的创建、删除、重命名、自动生成名称、获取数据集、删除数据集。
 class DatasetService:
+    # cdg: 获取知识库列表。具体实现思路如下：
+    # 1.构建知识库查询语句，包括过滤条件、排序条件、分页条件。
+    # 2.执行查询语句，获取知识库列表。
+    # 3.检查知识库是否存在，如果不存在，则抛出DatasetNotExistsError异常。
+    # 4.返回知识库。
     @staticmethod
     def get_datasets(page, per_page, tenant_id=None, user=None, search=None, tag_ids=None, include_all=False):
         query = Dataset.query.filter(Dataset.tenant_id == tenant_id).order_by(Dataset.created_at.desc())
 
+        # cdg: 如果用户存在，则获取用户有权限的知识库ID列表，并根据用户角色和权限过滤知识库，否则，只显示所有团队成员有权限的知识库。
         if user:
             # get permitted dataset ids
             dataset_permission = DatasetPermission.query.filter_by(account_id=user.id, tenant_id=tenant_id).all()
             permitted_dataset_ids = {dp.dataset_id for dp in dataset_permission} if dataset_permission else None
 
+            # cdg: 如果用户角色为知识库操作员，则只显示用户有权限的知识库。
             if user.current_role == TenantAccountRole.DATASET_OPERATOR:
                 # only show datasets that the user has permission to access
                 if permitted_dataset_ids:
@@ -114,9 +122,11 @@ class DatasetService:
             # if no user, only show datasets that are shared with all team members
             query = query.filter(Dataset.permission == DatasetPermissionEnum.ALL_TEAM)
 
+        # cdg: 如果搜索条件不为空，则添加搜索条件。
         if search:
             query = query.filter(Dataset.name.ilike(f"%{search}%"))
 
+        # cdg: 如果标签ID不为空，则添加标签过滤条件。
         if tag_ids:
             target_ids = TagService.get_target_ids_by_tag_ids("knowledge", tenant_id, tag_ids)
             if target_ids:
@@ -124,10 +134,16 @@ class DatasetService:
             else:
                 return [], 0
 
+        # cdg: 执行查询语句，获取知识库列表。
         datasets = query.paginate(page=page, per_page=per_page, max_per_page=100, error_out=False)
 
+        # cdg: 返回知识库列表和总数。
         return datasets.items, datasets.total
 
+    # cdg: 获取知识库处理规则（即文档切分规则）。具体实现思路如下：
+    # 1. 获取知识库处理规则。
+    # 2. 如果知识库处理规则不存在，则使用默认规则。
+    # 3. 返回知识库处理规则。
     @staticmethod
     def get_process_rules(dataset_id):
         # get the latest process rule
@@ -146,6 +162,7 @@ class DatasetService:
             rules = DocumentService.DEFAULT_RULES["rules"]
         return {"mode": mode, "rules": rules}
 
+    # cdg: 根据ID列表获取知识库列表。
     @staticmethod
     def get_datasets_by_ids(ids, tenant_id):
         datasets = Dataset.query.filter(Dataset.id.in_(ids), Dataset.tenant_id == tenant_id).paginate(
@@ -153,6 +170,7 @@ class DatasetService:
         )
         return datasets.items, datasets.total
 
+    # cdg: 创建空知识库。
     @staticmethod
     def create_empty_dataset(
         tenant_id: str,
@@ -165,9 +183,12 @@ class DatasetService:
         external_knowledge_api_id: Optional[str] = None,
         external_knowledge_id: Optional[str] = None,
     ):
+        # cdg: 检查知识库名称是否已存在
         # check if dataset name already exists
         if Dataset.query.filter_by(name=name, tenant_id=tenant_id).first():
             raise DatasetNameDuplicateError(f"Dataset with name {name} already exists.")
+
+        # cdg: 初始化高质量索引模式下默认嵌入（embedding）模型
         embedding_model = None
         if indexing_technique == "high_quality":
             model_manager = ModelManager()
@@ -187,6 +208,7 @@ class DatasetService:
         db.session.add(dataset)
         db.session.flush()
 
+        # cdg: 如果知识库提供商为外部，则创建外部知识库绑定。
         if provider == "external" and external_knowledge_api_id:
             external_knowledge_api = ExternalDatasetService.get_external_knowledge_api(external_knowledge_api_id)
             if not external_knowledge_api:
@@ -203,13 +225,16 @@ class DatasetService:
         db.session.commit()
         return dataset
 
+    # cdg: 获取知识库信息
     @staticmethod
     def get_dataset(dataset_id) -> Optional[Dataset]:
         dataset: Optional[Dataset] = Dataset.query.filter_by(id=dataset_id).first()
         return dataset
 
+    # cdg: 检查知识库模型设置检查
     @staticmethod
     def check_dataset_model_setting(dataset):
+        # cdg: 如果知识库索引技术为高质量，则检查嵌入模型设置(只有高质量索引模式下，才需要检查嵌入模型设置)
         if dataset.indexing_technique == "high_quality":
             try:
                 model_manager = ModelManager()
@@ -227,6 +252,7 @@ class DatasetService:
             except ProviderTokenNotInitError as ex:
                 raise ValueError(f"The dataset in unavailable, due to: {ex.description}")
 
+    # cdg: 检查嵌入模型设置，与上面check_dataset_model_setting方法功能类似，但更通用，可以用于检查任何嵌入模型设置。
     @staticmethod
     def check_embedding_model_setting(tenant_id: str, embedding_model_provider: str, embedding_model: str):
         try:
@@ -244,6 +270,11 @@ class DatasetService:
         except ProviderTokenNotInitError as ex:
             raise ValueError(f"The dataset in unavailable, due to: {ex.description}")
 
+    # cdg: 更新知识库。具体实现思路如下：
+    # 1. 获取知识库。
+    # 2. 检查知识库权限。
+    # 3. 更新知识库。
+    # 4. 返回知识库。
     @staticmethod
     def update_dataset(dataset_id, data, user):
         dataset = DatasetService.get_dataset(dataset_id)
@@ -355,6 +386,11 @@ class DatasetService:
                 deal_dataset_vector_index_task.delay(dataset_id, action)
         return dataset
 
+    # cdg: 删除知识库。具体实现思路如下：
+    # 1. 获取知识库。
+    # 2. 检查知识库权限。
+    # 3. 删除知识库。
+    # 4. 返回删除结果。
     @staticmethod
     def delete_dataset(dataset_id, user):
         dataset = DatasetService.get_dataset(dataset_id)
@@ -370,6 +406,9 @@ class DatasetService:
         db.session.commit()
         return True
 
+    # cdg: 检查知识库是否被应用使用。具体实现思路如下：
+    # 1. 获取知识库被应用使用的数量。
+    # 2. 如果数量大于0，则返回True，否则返回False。
     @staticmethod
     def dataset_use_check(dataset_id) -> bool:
         count = AppDatasetJoin.query.filter_by(dataset_id=dataset_id).count()
@@ -377,6 +416,12 @@ class DatasetService:
             return True
         return False
 
+    # cdg: 检查知识库权限。具体实现思路如下：
+    # 1. 检查知识库租户ID是否与用户租户ID相同，如果不同，则抛出NoPermissionError异常。
+    # 2. 如果用户角色为所有者，则跳过权限检查。
+    # 3. 如果知识库权限为仅自己，则检查知识库创建者是否与用户ID相同，如果不同，则抛出NoPermissionError异常。
+    # 4. 如果知识库权限为部分团队，则检查用户是否在知识库权限表中，如果不在，则抛出NoPermissionError异常。
+    # 5. 如果用户没有权限，则抛出NoPermissionError异常。
     @staticmethod
     def check_dataset_permission(dataset, user):
         if dataset.tenant_id != user.current_tenant_id:
@@ -396,6 +441,11 @@ class DatasetService:
                     logging.debug(f"User {user.id} does not have permission to access dataset {dataset.id}")
                     raise NoPermissionError("You do not have permission to access this dataset.")
 
+    # cdg: 检查知识库操作员权限。具体实现思路如下：
+    # 1. 检查知识库是否存在，如果不存在，则抛出ValueError异常。
+    # 2. 检查用户是否存在，如果不存在，则抛出ValueError异常。
+    # 3. 如果用户角色不为所有者，则检查知识库权限为仅自己，如果知识库创建者与用户ID不同，则抛出NoPermissionError异常。
+    # 4. 如果知识库权限为部分团队，则检查用户是否在知识库权限表中，如果不在，则抛出NoPermissionError异常。
     @staticmethod
     def check_dataset_operator_permission(user: Optional[Account] = None, dataset: Optional[Dataset] = None):
         if not dataset:
@@ -415,6 +465,9 @@ class DatasetService:
                 ):
                     raise NoPermissionError("You do not have permission to access this dataset.")
 
+    # cdg: 获取知识库查询。具体实现思路如下：
+    # 1. 从数据库获取知识库查询，并按创建时间降序排序。
+    # 2. 分页返回知识库查询。
     @staticmethod
     def get_dataset_queries(dataset_id: str, page: int, per_page: int):
         dataset_queries = (
@@ -424,6 +477,9 @@ class DatasetService:
         )
         return dataset_queries.items, dataset_queries.total
 
+    # cdg: 获取知识库相关应用。具体实现思路如下：
+    # 1. 从数据库获取知识库相关应用，并按创建时间降序排序。
+    # 2. 返回知识库相关应用。
     @staticmethod
     def get_related_apps(dataset_id: str):
         return (
@@ -432,6 +488,12 @@ class DatasetService:
             .all()
         )
 
+    # cdg: 获取知识库自动禁用日志。具体实现思路如下：
+    # 1. 获取当前租户的特征。
+    # 2. 如果特征的账单功能未启用或订阅计划为沙盒，则返回空字典。
+    # 3. 获取最近30天的自动禁用日志。
+    # 4. 如果存在自动禁用日志，则返回自动禁用日志的文档ID列表和数量。
+    # 5. 否则，返回空字典。
     @staticmethod
     def get_dataset_auto_disable_logs(dataset_id: str) -> dict:
         features = FeatureService.get_features(current_user.current_tenant_id)
@@ -457,7 +519,9 @@ class DatasetService:
         }
 
 
+# cdg: 文档服务，用于处理文档的创建、删除、重命名、自动生成名称、获取文档、删除文档。
 class DocumentService:
+    # cdg: 默认文档处理规则，包括预处理规则、分段规则、限制规则。
     DEFAULT_RULES: dict[str, Any] = {
         "mode": "custom",
         "rules": {
@@ -468,10 +532,11 @@ class DocumentService:
             "segmentation": {"delimiter": "\n", "max_tokens": 500, "chunk_overlap": 50},
         },
         "limits": {
-            "indexing_max_segmentation_tokens_length": dify_config.INDEXING_MAX_SEGMENTATION_TOKENS_LENGTH,
+            "indexing_max_segmentation_tokens_length": dify_config.INDEXING_MAX_SEGMENTATION_TOKENS_LENGTH, # cdg: 索引最大分段长度
         },
     }
 
+    # cdg: 文档元数据模式，包括书籍、网页、论文、社交媒体帖子、维基百科条目、个人文档、业务文档、IM聊天记录、同步自Notion、同步自GitHub、其他。
     DOCUMENT_METADATA_SCHEMA: dict[str, Any] = {
         "book": {
             "title": str,
@@ -565,6 +630,7 @@ class DocumentService:
         "others": dict,
     }
 
+    # cdg: 从数据库获取文档信息
     @staticmethod
     def get_document(dataset_id: str, document_id: Optional[str] = None) -> Optional[Document]:
         if document_id:
@@ -575,18 +641,21 @@ class DocumentService:
         else:
             return None
 
+    # cdg: 根据文档ID获取文档信息
     @staticmethod
     def get_document_by_id(document_id: str) -> Optional[Document]:
         document = db.session.query(Document).filter(Document.id == document_id).first()
 
         return document
 
+    # cdg: 根据知识库ID获取文档列表
     @staticmethod
     def get_document_by_dataset_id(dataset_id: str) -> list[Document]:
         documents = db.session.query(Document).filter(Document.dataset_id == dataset_id, Document.enabled == True).all()
 
         return documents
 
+    # cdg: 根据知识库ID获取错误文档列表
     @staticmethod
     def get_error_documents_by_dataset_id(dataset_id: str) -> list[Document]:
         documents = (
@@ -596,6 +665,7 @@ class DocumentService:
         )
         return documents
 
+    # cdg: 根据批次ID获取文档列表
     @staticmethod
     def get_batch_documents(dataset_id: str, batch: str) -> list[Document]:
         documents = (
@@ -610,11 +680,13 @@ class DocumentService:
 
         return documents
 
+    # cdg: 根据文件ID获取文件详情
     @staticmethod
     def get_document_file_detail(file_id: str):
         file_detail = db.session.query(UploadFile).filter(UploadFile.id == file_id).one_or_none()
         return file_detail
 
+    # cdg: 检查文档是否已归档
     @staticmethod
     def check_archived(document):
         if document.archived:
@@ -622,6 +694,11 @@ class DocumentService:
         else:
             return False
 
+    # cdg: 删除文档。具体实现思路如下：
+    # 1. 触发文档已删除信号，通知所有订阅者文档已删除。
+    # 2. 获取文件ID。
+    # 3. 删除文档。
+    # 4. 提交删除操作。
     @staticmethod
     def delete_document(document):
         # trigger document_was_deleted signal
@@ -638,6 +715,12 @@ class DocumentService:
         db.session.delete(document)
         db.session.commit()
 
+    # cdg: 删除文档。具体实现思路如下：
+    # 1. 获取文档列表。
+    # 2. 获取文件ID列表。
+    # 3. 触发文档已删除信号，通知所有订阅者文档已删除。
+    # 4. 删除文档。
+    # 5. 提交删除操作。
     @staticmethod
     def delete_documents(dataset: Dataset, document_ids: list[str]):
         documents = db.session.query(Document).filter(Document.id.in_(document_ids)).all()
@@ -652,6 +735,12 @@ class DocumentService:
             db.session.delete(document)
         db.session.commit()
 
+
+    # cdg: 重命名文档。具体实现思路如下：
+    # 1. 获取知识库。
+    # 2. 检查知识库权限。
+    # 3. 重命名文档。
+    # 4. 返回重命名后的文档。
     @staticmethod
     def rename_document(dataset_id: str, document_id: str, name: str) -> Document:
         dataset = DatasetService.get_dataset(dataset_id)
@@ -673,6 +762,11 @@ class DocumentService:
 
         return document
 
+    # cdg: 暂停文档索引（即暂停文档索引任务）。具体实现思路如下：
+    # 1. 检查文档索引状态。
+    # 2. 更新文档索引状态。
+    # 3. 设置文档暂停标志。
+    # 4. 提交暂停操作。
     @staticmethod
     def pause_document(document):
         if document.indexing_status not in {"waiting", "parsing", "cleaning", "splitting", "indexing"}:
@@ -688,6 +782,11 @@ class DocumentService:
         indexing_cache_key = "document_{}_is_paused".format(document.id)
         redis_client.setnx(indexing_cache_key, "True")
 
+    # cdg: 恢复文档索引（即恢复文档索引任务）。具体实现思路如下：
+    # 1. 检查文档索引状态。
+    # 2. 更新文档索引状态。
+    # 3. 设置文档暂停标志。
+    # 4. 提交恢复操作。
     @staticmethod
     def recover_document(document):
         if not document.is_paused:
@@ -705,6 +804,11 @@ class DocumentService:
         # trigger async task
         recover_document_indexing_task.delay(document.dataset_id, document.id)
 
+    # cdg: 重试文档索引（即重试文档索引任务）。具体实现思路如下：
+    # 1.检查文档索引状态，如果文档正在重试，则抛出ValueError异常。
+    # 2.更新文档索引状态。
+    # 3.设置文档重试标志。
+    # 4.提交重试操作。
     @staticmethod
     def retry_document(dataset_id: str, documents: list[Document]):
         for document in documents:
@@ -723,6 +827,11 @@ class DocumentService:
         document_ids = [document.id for document in documents]
         retry_document_indexing_task.delay(dataset_id, document_ids)
 
+    # cdg: 同步网站文档（即同步网站文档索引任务）。具体实现思路如下：
+    # 1.检查文档索引状态，如果文档正在同步，则抛出ValueError异常。
+    # 2.更新文档索引状态。
+    # 3.设置文档同步标志。
+    # 4.提交同步操作。
     @staticmethod
     def sync_website_document(dataset_id: str, document: Document):
         # add sync flag
@@ -742,6 +851,7 @@ class DocumentService:
 
         sync_website_document_indexing_task.delay(dataset_id, document.id)
 
+    # cdg: 获取文档位置
     @staticmethod
     def get_documents_position(dataset_id):
         document = Document.query.filter_by(dataset_id=dataset_id).order_by(Document.position.desc()).first()
@@ -750,6 +860,13 @@ class DocumentService:
         else:
             return 1
 
+    # cdg: 保存文档（即保存文档索引任务）。具体实现思路如下：
+    # 1.检查文档限制。
+    # 2.检查文档上传配额。
+    # 3.更新数据集数据源类型。
+    # 4.更新数据集索引技术。
+    # 5.更新数据集嵌入模型。
+    # 6.更新数据集检索模型。
     @staticmethod
     def save_document_with_dataset_id(
         dataset: Dataset,
@@ -1021,6 +1138,7 @@ class DocumentService:
 
         return documents, batch
 
+    # cdg: 检查文档上传额度，如果文档上传额度超过限制，则抛出ValueError异常。
     @staticmethod
     def check_documents_upload_quota(count: int, features: FeatureModel):
         can_upload_size = features.documents_upload_quota.limit - features.documents_upload_quota.size
@@ -1029,6 +1147,7 @@ class DocumentService:
                 f"You have reached the limit of your subscription. Only {can_upload_size} documents can be uploaded."
             )
 
+    # cdg: 构建文档
     @staticmethod
     def build_document(
         dataset: Dataset,
@@ -1059,6 +1178,7 @@ class DocumentService:
         )
         return document
 
+    # cdg: 获取租户文档数量
     @staticmethod
     def get_tenant_documents_count():
         documents_count = Document.query.filter(
@@ -1069,6 +1189,18 @@ class DocumentService:
         ).count()
         return documents_count
 
+    # cdg: 更新文档（即更新文档索引任务）。具体实现思路如下：
+    # 1.检查数据集模型设置。
+    # 2.获取文档。
+    # 3.检查文档是否存在，如果不存在，则抛出NotFound异常。
+    # 4.检查文档显示状态，如果文档显示状态不为available，则抛出ValueError异常。
+    # 5.保存文档处理规则。
+    # 6.更新文档数据源。
+    # 7.更新文档名称。
+    # 8.更新文档索引状态。
+    # 9.更新文档分段状态。
+    # 10.触发文档索引更新任务。
+    # 11.返回文档。
     @staticmethod
     def update_document_with_dataset_id(
         dataset: Dataset,
@@ -1189,10 +1321,12 @@ class DocumentService:
         document_indexing_update_task.delay(document.dataset_id, document.id)
         return document
 
+    # cdg: 保存文档（即保存文档索引任务）
     @staticmethod
     def save_document_without_dataset_id(tenant_id: str, knowledge_config: KnowledgeConfig, account: Account):
         features = FeatureService.get_features(current_user.current_tenant_id)
 
+        # cdg: 检查账单功能是否启用，如果启用，则检查文档上传数量是否超过限制。
         if features.billing.enabled:
             count = 0
             if knowledge_config.data_source.info_list.data_source_type == "upload_file":
@@ -1217,6 +1351,7 @@ class DocumentService:
 
             DocumentService.check_documents_upload_quota(count, features)
 
+        # cdg: 检查知识库模型设置，如果知识库索引技术为高质量，则检查嵌入模型设置。
         dataset_collection_binding_id = None
         retrieval_model = None
         if knowledge_config.indexing_technique == "high_quality":
@@ -1261,6 +1396,10 @@ class DocumentService:
 
         return dataset, documents, batch
 
+    # cdg: 检查文档创建参数。具体实现思路如下：
+    # 1.检查数据源和处理规则是否存在。
+    # 2.如果数据源存在，则检查数据源参数。
+    # 3.如果处理规则存在，则检查处理规则参数。
     @classmethod
     def document_create_args_validate(cls, knowledge_config: KnowledgeConfig):
         if not knowledge_config.data_source and not knowledge_config.process_rule:
@@ -1271,6 +1410,13 @@ class DocumentService:
             if knowledge_config.process_rule:
                 DocumentService.process_rule_args_validate(knowledge_config)
 
+    # cdg: 检查数据源参数。具体实现思路如下：
+    # 1.检查数据源是否存在。
+    # 2.检查数据源类型是否有效。
+    # 3.检查数据源信息是否存在。
+    # 4.如果数据源类型为上传文件，则检查上传文件列表是否存在。
+    # 5.如果数据源类型为Notion导入，则检查Notion信息列表是否存在。
+    # 6.如果数据源类型为网站爬取，则检查网站信息列表是否存在。
     @classmethod
     def data_source_args_validate(cls, knowledge_config: KnowledgeConfig):
         if not knowledge_config.data_source:
@@ -1292,6 +1438,13 @@ class DocumentService:
             if not knowledge_config.data_source.info_list.website_info_list:
                 raise ValueError("Website source info is required")
 
+    # cdg:文档处理规则参数检查。具体实现思路如下：
+    # 1.检查文档处理规则是否存在。
+    # 2.检查文档处理规则模式是否有效。
+    # 3.如果文档处理规则模式为自动，则设置文档处理规则为None。
+    # 4.如果文档处理规则模式为手动，则检查文档处理规则规则是否存在。
+    # 5.如果文档处理规则规则存在，则检查文档处理规则规则预处理规则是否存在。
+    # 6.如果文档处理规则规则预处理规则存在，则检查文档处理规则规则预处理规则ID是否存在。
     @classmethod
     def process_rule_args_validate(cls, knowledge_config: KnowledgeConfig):
         if not knowledge_config.process_rule:
@@ -1343,6 +1496,13 @@ class DocumentService:
                 if not isinstance(knowledge_config.process_rule.rules.segmentation.max_tokens, int):
                     raise ValueError("Process rule segmentation max_tokens is invalid")
 
+    # cdg:评估文档处理规则参数。具体实现思路如下：
+    # 1.检查文档处理规则是否存在。
+    # 2.检查文档处理规则模式是否有效。
+    # 3.如果文档处理规则模式为自动，则设置文档处理规则为None。
+    # 4.如果文档处理规则模式为手动，则检查文档处理规则规则是否存在。
+    # 5.如果文档处理规则规则存在，则检查文档处理规则规则预处理规则是否存在。
+    # 6.如果文档处理规则规则预处理规则存在，则检查文档处理规则规则预处理规则ID是否存在。
     @classmethod
     def estimate_args_validate(cls, args: dict):
         if "info_list" not in args or not args["info_list"]:
@@ -1427,7 +1587,15 @@ class DocumentService:
                 raise ValueError("Process rule segmentation max_tokens is invalid")
 
 
+# cdg: 分段服务，用于处理分段创建、多分段创建。
 class SegmentService:
+    # cdg: 检查分段创建参数。具体实现思路如下：
+    # 1.检查文档表单是否为qa_model。
+    # 2.如果文档表单为qa_model，则检查答案是否存在。
+    # 3.如果答案存在，则检查答案是否为空。
+    # 4.如果答案为空，则抛出ValueError异常。
+    # 5.检查内容是否存在。
+    # 6.如果内容不存在，则抛出ValueError异常。
     @classmethod
     def segment_create_args_validate(cls, args: dict, document: Document):
         if document.doc_form == "qa_model":
@@ -1438,12 +1606,15 @@ class SegmentService:
         if "content" not in args or not args["content"] or not args["content"].strip():
             raise ValueError("Content is empty")
 
+    # cdg: 文件切分（即创建分段）
     @classmethod
     def create_segment(cls, args: dict, document: Document, dataset: Dataset):
-        content = args["content"]
-        doc_id = str(uuid.uuid4())
-        segment_hash = helper.generate_text_hash(content)
-        tokens = 0
+        content = args["content"]  # cdg: 获取内容
+        doc_id = str(uuid.uuid4())  # cdg: 生成文档ID
+        segment_hash = helper.generate_text_hash(content)  # cdg: 生成分段哈希
+        tokens = 0  # cdg: 计算分段嵌入使用令牌
+
+        # cdg: 如果知识库索引技术为高质量，则检查嵌入模型设置。
         if dataset.indexing_technique == "high_quality":
             model_manager = ModelManager()
             embedding_model = model_manager.get_model_instance(
@@ -1453,7 +1624,10 @@ class SegmentService:
                 model=dataset.embedding_model,
             )
             # calc embedding use tokens
+            # cdg: 计算分段嵌入使用令牌
             tokens = embedding_model.get_text_embedding_num_tokens(texts=[content])
+
+        # cdg:设置锁，防止并发创建分段。
         lock_name = "add_segment_lock_document_id_{}".format(document.id)
         with redis_client.lock(lock_name, timeout=600):
             max_position = (
@@ -1488,6 +1662,7 @@ class SegmentService:
 
             # save vector index
             try:
+                # cdg: 创建向量索引（即创建分段向量索引）
                 VectorService.create_segments_vector([args["keywords"]], [segment_document], dataset, document.doc_form)
             except Exception as e:
                 logging.exception("create segment index failed")
@@ -1496,9 +1671,17 @@ class SegmentService:
                 segment_document.status = "error"
                 segment_document.error = str(e)
                 db.session.commit()
+            # cdg: 获取分段
             segment = db.session.query(DocumentSegment).filter(DocumentSegment.id == segment_document.id).first()
             return segment
 
+    # cdg: 多分段创建，具体实现思路如下：
+    # 1.设置锁，防止并发创建分段。
+    # 2.如果知识库索引技术为高质量，则检查嵌入模型设置。
+    # 3.获取分段。
+    # 4.创建向量索引（即创建分段向量索引）。
+    # 5.获取分段。
+    # 6.返回分段。
     @classmethod
     def multi_create_segment(cls, segments: list, document: Document, dataset: Dataset):
         lock_name = "multi_add_segment_lock_document_id_{}".format(document.id)
@@ -1565,6 +1748,7 @@ class SegmentService:
             document.word_count += increment_word_count
             db.session.add(document)
             try:
+                # cdg: 创建向量索引（即创建分段向量索引）
                 # save vector index
                 VectorService.create_segments_vector(keywords_list, pre_segment_data_list, dataset, document.doc_form)
             except Exception as e:
@@ -1577,6 +1761,13 @@ class SegmentService:
             db.session.commit()
             return segment_data_list
 
+    # cdg: 更新分段。具体实现思路如下：
+    # 1.检查分段索引状态。
+    # 2.检查分段是否启用。
+    # 3.检查分段是否禁用。
+    # 4.检查分段内容是否与新内容相同。
+    # 5.如果分段内容与新内容相同，则更新分段内容。
+    # 6.如果分段内容与新内容不同，则更新分段内容。
     @classmethod
     def update_segment(cls, args: SegmentUpdateArgs, segment: DocumentSegment, document: Document, dataset: Dataset):
         indexing_cache_key = "segment_{}_indexing".format(segment.id)
@@ -1746,6 +1937,13 @@ class SegmentService:
         new_segment = db.session.query(DocumentSegment).filter(DocumentSegment.id == segment.id).first()
         return new_segment
 
+    # cdg: 删除分段。具体实现思路如下：
+    # 1.检查分段索引状态。
+    # 2.检查分段是否启用。
+    # 3.如果分段启用，则发送删除分段索引任务。
+    # 4.删除分段。
+    # 5.更新文档词数。
+    # 6.提交删除操作。
     @classmethod
     def delete_segment(cls, segment: DocumentSegment, document: Document, dataset: Dataset):
         indexing_cache_key = "segment_{}_delete_indexing".format(segment.id)
@@ -1764,6 +1962,13 @@ class SegmentService:
         db.session.add(document)
         db.session.commit()
 
+    # cdg: 删除分段。具体实现思路如下：
+    # 1.检查分段索引状态。
+    # 2.检查分段是否启用。
+    # 3.如果分段启用，则发送删除分段索引任务。
+    # 4.删除分段。
+    # 5.更新文档词数。
+    # 6.提交删除操作。
     @classmethod
     def delete_segments(cls, segment_ids: list, document: Document, dataset: Dataset):
         index_node_ids = (
@@ -1782,6 +1987,11 @@ class SegmentService:
         db.session.query(DocumentSegment).filter(DocumentSegment.id.in_(segment_ids)).delete()
         db.session.commit()
 
+    # cdg: 更新分段状态。具体实现思路如下：
+    # 1.检查分段是否启用。
+    # 2.如果分段启用，则发送启用分段索引任务。
+    # 3.如果分段禁用，则发送禁用分段索引任务。
+    # 4.返回分段。
     @classmethod
     def update_segments_status(cls, segment_ids: list, action: str, dataset: Dataset, document: Document):
         if action == "enable":
@@ -1841,6 +2051,13 @@ class SegmentService:
         else:
             raise InvalidActionError()
 
+    # cdg: 创建子分段。具体实现思路如下：
+    # 1.设置锁，防止并发创建子分段。
+    # 2.生成子分段ID。
+    # 3.生成子分段哈希。
+    # 4.获取子分段数量。
+    # 5.获取子分段最大位置。
+    # 6.创建子分段。
     @classmethod
     def create_child_chunk(
         cls, content: str, segment: DocumentSegment, document: Document, dataset: Dataset
@@ -1894,6 +2111,13 @@ class SegmentService:
 
             return child_chunk
 
+    # cdg: 更新子分段。具体实现思路如下：
+    # 1.获取子分段。
+    # 2.获取子分段映射。
+    # 3.创建子分段。
+    # 4.更新子分段。
+    # 5.删除子分段。
+    # 6.返回子分段。
     @classmethod
     def update_child_chunks(
         cls,
@@ -1967,6 +2191,13 @@ class SegmentService:
             raise ChildChunkIndexingError(str(e))
         return sorted(new_child_chunks + update_child_chunks, key=lambda x: x.position)
 
+    # cdg: 更新子分段。具体实现思路如下：
+    # 1.更新子分段内容。
+    # 2.更新子分段词数。
+    # 3.更新子分段更新者。
+    # 4.更新子分段更新时间。
+    # 5.更新子分段类型。
+    # 6.添加子分段。
     @classmethod
     def update_child_chunk(
         cls,
@@ -1991,6 +2222,10 @@ class SegmentService:
             raise ChildChunkIndexingError(str(e))
         return child_chunk
 
+    # cdg: 删除子分段。具体实现思路如下：
+    # 1.删除子分段。
+    # 2.删除子分段向量索引。
+    # 3.提交删除操作。
     @classmethod
     def delete_child_chunk(cls, child_chunk: ChildChunk, dataset: Dataset):
         db.session.delete(child_chunk)
@@ -2002,6 +2237,13 @@ class SegmentService:
             raise ChildChunkDeleteIndexError(str(e))
         db.session.commit()
 
+    # cdg: 获取子分段。具体实现思路如下：
+    # 1.获取子分段。
+    # 2.获取子分段映射。
+    # 3.创建子分段。
+    # 4.更新子分段。
+    # 5.删除子分段。
+    # 6.返回子分段。
     @classmethod
     def get_child_chunks(
         cls, segment_id: str, document_id: str, dataset_id: str, page: int, limit: int, keyword: Optional[str] = None
@@ -2016,7 +2258,7 @@ class SegmentService:
             query = query.where(ChildChunk.content.ilike(f"%{keyword}%"))
         return query.paginate(page=page, per_page=limit, max_per_page=100, error_out=False)
 
-
+# cdg: 数据集绑定服务，用于处理数据集绑定创建、获取、更新、删除。
 class DatasetCollectionBindingService:
     @classmethod
     def get_dataset_collection_binding(
@@ -2044,6 +2286,10 @@ class DatasetCollectionBindingService:
             db.session.commit()
         return dataset_collection_binding
 
+    # cdg: 根据ID和类型获取数据集绑定。具体实现思路如下：
+    # 1.获取数据集绑定。
+    # 2.如果数据集绑定不存在，则抛出ValueError异常。
+    # 3.返回数据集绑定。
     @classmethod
     def get_dataset_collection_binding_by_id_and_type(
         cls, collection_binding_id: str, collection_type: str = "dataset"
@@ -2061,8 +2307,11 @@ class DatasetCollectionBindingService:
 
         return dataset_collection_binding
 
-
+# cdg: 数据集权限服务，用于处理数据集权限创建、获取、更新、删除。
 class DatasetPermissionService:
+    # cdg: 获取数据集部分成员列表。具体实现思路如下：
+    # 1.获取数据集部分成员列表。
+    # 2.返回数据集部分成员列表。
     @classmethod
     def get_dataset_partial_member_list(cls, dataset_id):
         user_list_query = (
@@ -2079,6 +2328,10 @@ class DatasetPermissionService:
 
         return user_list
 
+    # cdg: 更新数据集部分成员列表。具体实现思路如下：
+    # 1.删除数据集部分成员列表。
+    # 2.创建数据集部分成员列表。
+    # 3.提交更新操作。
     @classmethod
     def update_partial_member_list(cls, tenant_id, dataset_id, user_list):
         try:
@@ -2098,6 +2351,13 @@ class DatasetPermissionService:
             db.session.rollback()
             raise e
 
+    # cdg: 检查数据集权限。具体实现思路如下：
+    # 1.检查用户是否具有数据集编辑权限。
+    # 2.检查用户是否具有数据集操作员权限。
+    # 3.检查数据集权限是否与请求权限相同。
+    # 4.检查数据集部分成员列表是否为空。
+    # 5.检查数据集部分成员列表是否与本地成员列表相同。
+    # 6.如果数据集部分成员列表与本地成员列表不同，则抛出ValueError异常。
     @classmethod
     def check_permission(cls, user, dataset, requested_permission, requested_partial_member_list):
         if not user.is_dataset_editor:
@@ -2115,6 +2375,9 @@ class DatasetPermissionService:
             if set(local_member_list) != set(request_member_list):
                 raise ValueError("Dataset operators cannot change the dataset permissions.")
 
+    # cdg: 清除数据集部分成员列表。具体实现思路如下：
+    # 1.删除数据集部分成员列表。
+    # 2.提交删除操作。
     @classmethod
     def clear_partial_member_list(cls, dataset_id):
         try:

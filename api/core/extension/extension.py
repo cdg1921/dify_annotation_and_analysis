@@ -5,7 +5,9 @@ from core.external_data_tool.base import ExternalDataTool
 from core.moderation.base import Moderation
 
 
+# cdg: 扩展类，用于管理扩展的扫描、获取、验证等功能。
 class Extension:
+    # cdg: 模块扩展字典，用于存储模块扩展。
     __module_extensions: dict[str, dict[str, ModuleExtension]] = {}
 
     module_classes = {ExtensionModule.MODERATION: Moderation, ExtensionModule.EXTERNAL_DATA_TOOL: ExternalDataTool}
