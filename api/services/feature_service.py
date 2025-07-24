@@ -6,22 +6,22 @@ from configs import dify_config
 from services.billing_service import BillingService
 from services.enterprise.enterprise_service import EnterpriseService
 
-
+# cdg:订阅模型，包含plan和interval两个字段，分别表示订阅计划和订阅间隔。
 class SubscriptionModel(BaseModel):
     plan: str = "sandbox"
     interval: str = ""
 
-
+# cdg:计费模型，包含enabled和subscription两个字段，分别表示是否启用计费和订阅信息。
 class BillingModel(BaseModel):
     enabled: bool = False
     subscription: SubscriptionModel = SubscriptionModel()
 
-
+# cdg:限制模型，包含size和limit两个字段，分别表示限制数量和限制值。
 class LimitationModel(BaseModel):
     size: int = 0
     limit: int = 0
 
-
+# cdg:许可证状态枚举，包含多个状态。
 class LicenseStatus(StrEnum):
     NONE = "none"
     INACTIVE = "inactive"
@@ -30,12 +30,12 @@ class LicenseStatus(StrEnum):
     EXPIRED = "expired"
     LOST = "lost"
 
-
+# cdg:许可证模型，包含status和expired_at两个字段，分别表示许可证状态和过期时间。
 class LicenseModel(BaseModel):
     status: LicenseStatus = LicenseStatus.NONE
     expired_at: str = ""
 
-
+# cdg:功能模型，包含多个字段，分别表示计费、成员、应用、向量空间、注释配额、文档上传配额、文档处理、是否可以替换LOGO、模型负载均衡是否启用、数据集操作是否启用。
 class FeatureModel(BaseModel):
     billing: BillingModel = BillingModel()
     members: LimitationModel = LimitationModel(size=0, limit=1)
@@ -51,7 +51,7 @@ class FeatureModel(BaseModel):
     # pydantic configs
     model_config = ConfigDict(protected_namespaces=())
 
-
+# cdg:系统功能模型，包含多个字段，分别表示单点登录是否启用、单点登录协议、是否启用Web单点登录、Web单点登录协议、是否启用Web单点登录组件、是否启用邮箱验证码登录、是否启用邮箱密码登录、是否启用社交OAuth登录、是否允许注册、是否允许创建工作空间、是否设置邮箱、许可证状态、许可证过期时间。
 class SystemFeatureModel(BaseModel):
     sso_enforced_for_signin: bool = False
     sso_enforced_for_signin_protocol: str = ""
@@ -66,12 +66,14 @@ class SystemFeatureModel(BaseModel):
     is_email_setup: bool = False
     license: LicenseModel = LicenseModel()
 
-
+# cdg:功能服务，包含多个方法，分别用于获取功能、获取系统功能、填充系统参数、填充参数、填充计费API参数、填充企业参数。
 class FeatureService:
+    # cdg:查询租户现有的功能特性
     @classmethod
     def get_features(cls, tenant_id: str) -> FeatureModel:
         features = FeatureModel()
 
+        # cdg:从环境变量中填充参数
         cls._fulfill_params_from_env(features)
 
         if dify_config.BILLING_ENABLED and tenant_id:
@@ -79,6 +81,7 @@ class FeatureService:
 
         return features
 
+    # cdg:查询系统功能特性
     @classmethod
     def get_system_features(cls) -> SystemFeatureModel:
         system_features = SystemFeatureModel()
@@ -92,6 +95,7 @@ class FeatureService:
 
         return system_features
 
+    # cdg:从环境变量中填充系统参数
     @classmethod
     def _fulfill_system_params_from_env(cls, system_features: SystemFeatureModel):
         system_features.enable_email_code_login = dify_config.ENABLE_EMAIL_CODE_LOGIN
@@ -101,12 +105,14 @@ class FeatureService:
         system_features.is_allow_create_workspace = dify_config.ALLOW_CREATE_WORKSPACE
         system_features.is_email_setup = dify_config.MAIL_TYPE is not None and dify_config.MAIL_TYPE != ""
 
+    # cdg:从环境变量中填充参数
     @classmethod
     def _fulfill_params_from_env(cls, features: FeatureModel):
         features.can_replace_logo = dify_config.CAN_REPLACE_LOGO
         features.model_load_balancing_enabled = dify_config.MODEL_LB_ENABLED
         features.dataset_operator_enabled = dify_config.DATASET_OPERATOR_ENABLED
 
+    # cdg:从计费API中填充参数
     @classmethod
     def _fulfill_params_from_billing_api(cls, features: FeatureModel, tenant_id: str):
         billing_info = BillingService.get_info(tenant_id)
@@ -144,6 +150,7 @@ class FeatureService:
         if "model_load_balancing_enabled" in billing_info:
             features.model_load_balancing_enabled = billing_info["model_load_balancing_enabled"]
 
+    # cdg:从企业API中填充参数
     @classmethod
     def _fulfill_params_from_enterprise(cls, features):
         enterprise_info = EnterpriseService.get_info()

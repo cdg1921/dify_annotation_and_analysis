@@ -18,7 +18,14 @@ default_retrieval_model = {
 }
 
 
+# cdg:知识库召回命中测试服务，包含多个方法，分别用于检索、外部检索、压缩检索响应、压缩外部检索响应、检查查询参数。
 class HitTestingService:
+    # cdg:知识检索功能实现，具体实现如下：
+    # 1. 检查数据集是否可用，如果不可用则返回空结果
+    # 2. 获取检索模型，如果未设置则使用默认模型
+    # 3. 调用RetrievalService的retrieve方法进行检索
+    # 4. 创建DatasetQuery对象并添加到数据库
+    # 5. 返回检索结果
     @classmethod
     def retrieve(
         cls,

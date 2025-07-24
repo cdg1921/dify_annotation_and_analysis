@@ -25,8 +25,9 @@ from .errors.file import FileTooLargeError, UnsupportedFileTypeError
 
 PREVIEW_WORDS_LIMIT = 3000
 
-
+# cdg:文件服务，包含多个方法，分别用于上传文件、检查文件大小、上传文本、获取文件预览、获取图片预览、获取文件生成器、获取公共图片预览。
 class FileService:
+    # cdg:上传文件
     @staticmethod
     def upload_file(
         *,
@@ -37,35 +38,42 @@ class FileService:
         source: Literal["datasets"] | None = None,
         source_url: str = "",
     ) -> UploadFile:
+        # cdg:获取文件扩展名
         # get file extension
         extension = filename.split(".")[-1].lower()
+        # cdg:如果文件名长度超过200，则截取前200个字符
         if len(filename) > 200:
             filename = filename.split(".")[0][:200] + "." + extension
 
+        # cdg:如果source为datasets，且文件扩展名不在DOCUMENT_EXTENSIONS中，则抛出UnsupportedFileTypeError异常
         if source == "datasets" and extension not in DOCUMENT_EXTENSIONS:
             raise UnsupportedFileTypeError()
 
-        # get file size
+        # cdg:获取文件大小
         file_size = len(content)
 
+        # cdg:检查文件大小是否超过限制
         # check if the file size is exceeded
         if not FileService.is_file_size_within_limit(extension=extension, file_size=file_size):
             raise FileTooLargeError
 
+        # cdg:生成文件唯一标识符
         # generate file key
         file_uuid = str(uuid.uuid4())
-
+        # cdg:获取当前租户ID
         if isinstance(user, Account):
             current_tenant_id = user.current_tenant_id
         else:
             # end_user
             current_tenant_id = user.tenant_id
 
+        # cdg:生成文件存储路径
         file_key = "upload_files/" + (current_tenant_id or "") + "/" + file_uuid + "." + extension
 
+        # cdg:保存文件到存储
         # save file to storage
         storage.save(file_key, content)
-
+        # cdg:保存文件信息到数据库
         # save file to db
         upload_file = UploadFile(
             tenant_id=current_tenant_id or "",
@@ -88,6 +96,7 @@ class FileService:
 
         return upload_file
 
+    # cdg:检查文件大小是否超过限制，根据文件类型设置不同的限制
     @staticmethod
     def is_file_size_within_limit(*, extension: str, file_size: int) -> bool:
         if extension in IMAGE_EXTENSIONS:
@@ -101,6 +110,7 @@ class FileService:
 
         return file_size <= file_size_limit
 
+    # cdg:上传文本类型文件
     @staticmethod
     def upload_text(text: str, text_name: str) -> UploadFile:
         if len(text_name) > 200:
@@ -134,6 +144,7 @@ class FileService:
 
         return upload_file
 
+    # cdg:获取文件预览
     @staticmethod
     def get_file_preview(file_id: str):
         upload_file = db.session.query(UploadFile).filter(UploadFile.id == file_id).first()
@@ -142,15 +153,18 @@ class FileService:
             raise NotFound("File not found")
 
         # extract text from file
+        # cdg:文件解析
         extension = upload_file.extension
         if extension.lower() not in DOCUMENT_EXTENSIONS:
             raise UnsupportedFileTypeError()
 
+        # cdg:提取文本
         text = ExtractProcessor.load_from_upload_file(upload_file, return_text=True)
         text = text[0:PREVIEW_WORDS_LIMIT] if text else ""
 
         return text
 
+    # cdg:获取图片预览
     @staticmethod
     def get_image_preview(file_id: str, timestamp: str, nonce: str, sign: str):
         result = file_helpers.verify_image_signature(
@@ -173,6 +187,7 @@ class FileService:
 
         return generator, upload_file.mime_type
 
+    # cdg:获取文件生成器
     @staticmethod
     def get_file_generator_by_file_id(file_id: str, timestamp: str, nonce: str, sign: str):
         result = file_helpers.verify_file_signature(upload_file_id=file_id, timestamp=timestamp, nonce=nonce, sign=sign)
@@ -188,6 +203,7 @@ class FileService:
 
         return generator, upload_file
 
+    # cdg:获取公共图片预览
     @staticmethod
     def get_public_image_preview(file_id: str):
         upload_file = db.session.query(UploadFile).filter(UploadFile.id == file_id).first()
