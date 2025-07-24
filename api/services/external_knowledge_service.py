@@ -20,8 +20,13 @@ from services.entities.external_knowledge_entities.external_knowledge_entities i
 )
 from services.errors.dataset import DatasetNameDuplicateError
 
-
+# cdg:外部知识库链接服务，主要用于管理和操作外部知识库API的相关功能。它定义了一个名为ExternalDatasetService的服务类，提供了丰富的方法来实现外部知识库API的增删改查、校验、调用等操作。
 class ExternalDatasetService:
+    # cdg:获取外部知识库API列表,返回外部知识库API列表和总数量。主要思路是：
+    # 1. 构建查询条件，根据tenant_id过滤，并按创建时间降序排序
+    # 2. 如果search参数不为空，则添加名称模糊搜索条件
+    # 3. 使用paginate方法进行分页查询，设置最大每页数量为100，错误时输出False
+    # 4. 返回查询结果的items（当前页的API列表）和total（总数量）
     @staticmethod
     def get_external_knowledge_apis(page, per_page, tenant_id, search=None) -> tuple[list[ExternalKnowledgeApis], int]:
         query = ExternalKnowledgeApis.query.filter(ExternalKnowledgeApis.tenant_id == tenant_id).order_by(
@@ -34,6 +39,7 @@ class ExternalDatasetService:
 
         return external_knowledge_apis.items, external_knowledge_apis.total
 
+    # cdg:验证API列表是否有效，主要用于检查API配置是否包含必要的endpoint和api_key。如果配置为空或缺少必要字段，则抛出ValueError异常。
     @classmethod
     def validate_api_list(cls, api_settings: dict):
         if not api_settings:
@@ -43,6 +49,7 @@ class ExternalDatasetService:
         if "api_key" not in api_settings and not api_settings["api_key"]:
             raise ValueError("api_key is required")
 
+    # cdg:创建外部知识库API，主要用于创建新的外部知识库API配置。它首先验证API配置是否包含必要的endpoint和api_key，然后创建新的ExternalKnowledgeApis对象并将其添加到数据库中。
     @staticmethod
     def create_external_knowledge_api(tenant_id: str, user_id: str, args: dict) -> ExternalKnowledgeApis:
         settings = args.get("settings")
@@ -62,6 +69,7 @@ class ExternalDatasetService:
         db.session.commit()
         return external_knowledge_api
 
+    # cdg:检查API配置是否包含必要的endpoint和api_key。如果配置为空或缺少必要字段，则抛出ValueError异常。
     @staticmethod
     def check_endpoint_and_api_key(settings: dict):
         if "endpoint" not in settings or not settings["endpoint"]:
@@ -87,6 +95,7 @@ class ExternalDatasetService:
         if response.status_code == 403:
             raise ValueError(f"Forbidden: Authorization failed with api_key: {api_key}")
 
+    # cdg:获取外部知识库API，主要用于根据API ID获取对应的外部知识库API配置。它首先构建查询条件，然后执行查询操作，如果未找到对应的API配置，则抛出ValueError异常。
     @staticmethod
     def get_external_knowledge_api(external_knowledge_api_id: str) -> ExternalKnowledgeApis:
         external_knowledge_api: Optional[ExternalKnowledgeApis] = ExternalKnowledgeApis.query.filter_by(
@@ -96,6 +105,7 @@ class ExternalDatasetService:
             raise ValueError("api template not found")
         return external_knowledge_api
 
+    # cdg:更新外部知识库API，主要用于更新现有外部知识库API的配置。它首先验证API配置是否包含必要的endpoint和api_key，然后更新ExternalKnowledgeApis对象的属性，并将其保存到数据库中。
     @staticmethod
     def update_external_knowledge_api(tenant_id, user_id, external_knowledge_api_id, args) -> ExternalKnowledgeApis:
         external_knowledge_api: Optional[ExternalKnowledgeApis] = ExternalKnowledgeApis.query.filter_by(
@@ -115,6 +125,7 @@ class ExternalDatasetService:
 
         return external_knowledge_api
 
+    # cdg:删除外部知识库API，主要用于删除指定ID的外部知识库API配置。它首先构建查询条件，然后执行删除操作，如果未找到对应的API配置，则抛出ValueError异常。
     @staticmethod
     def delete_external_knowledge_api(tenant_id: str, external_knowledge_api_id: str):
         external_knowledge_api = ExternalKnowledgeApis.query.filter_by(
@@ -126,6 +137,7 @@ class ExternalDatasetService:
         db.session.delete(external_knowledge_api)
         db.session.commit()
 
+    # cdg:检查外部知识库API是否被使用，主要用于检查指定ID的外部知识库API是否被其他对象引用。它首先构建查询条件，然后执行计数操作，如果计数大于0，则返回True和计数，否则返回False和0。
     @staticmethod
     def external_knowledge_api_use_check(external_knowledge_api_id: str) -> tuple[bool, int]:
         count = ExternalKnowledgeBindings.query.filter_by(external_knowledge_api_id=external_knowledge_api_id).count()
@@ -133,6 +145,7 @@ class ExternalDatasetService:
             return True, count
         return False, 0
 
+    # cdg:获取外部知识库绑定，主要用于根据数据集ID获取对应的外部知识库绑定配置。它首先构建查询条件，然后执行查询操作，如果未找到对应的绑定配置，则抛出ValueError异常。
     @staticmethod
     def get_external_knowledge_binding_with_dataset_id(tenant_id: str, dataset_id: str) -> ExternalKnowledgeBindings:
         external_knowledge_binding: Optional[ExternalKnowledgeBindings] = ExternalKnowledgeBindings.query.filter_by(
@@ -142,6 +155,7 @@ class ExternalDatasetService:
             raise ValueError("external knowledge binding not found")
         return external_knowledge_binding
 
+    # cdg:验证文档创建参数，主要用于验证文档创建参数是否符合API配置的要求。它首先构建查询条件，然后执行查询操作，如果未找到对应的API配置，则抛出ValueError异常。
     @staticmethod
     def document_create_args_validate(tenant_id: str, external_knowledge_api_id: str, process_parameter: dict):
         external_knowledge_api = ExternalKnowledgeApis.query.filter_by(
@@ -157,6 +171,7 @@ class ExternalDatasetService:
                     if parameter.get("required", False) and not process_parameter.get(parameter.get("name")):
                         raise ValueError(f'{parameter.get("name")} is required')
 
+    # cdg:处理外部API请求，主要用于处理外部API请求。它首先构建查询条件，然后执行查询操作，如果未找到对应的API配置，则抛出ValueError异常。
     @staticmethod
     def process_external_api(
         settings: ExternalKnowledgeApiSetting, files: Union[None, dict[str, Any]]
@@ -176,6 +191,7 @@ class ExternalDatasetService:
         )
         return response
 
+    # cdg:组装请求头，主要用于组装请求头。它首先构建查询条件，然后执行查询操作，如果未找到对应的API配置，则抛出ValueError异常。
     @staticmethod
     def assembling_headers(authorization: Authorization, headers: Optional[dict] = None) -> dict[str, Any]:
         authorization = deepcopy(authorization)
@@ -202,10 +218,12 @@ class ExternalDatasetService:
 
         return headers
 
+    # cdg:获取外部知识库API设置，主要用于将字典转换为ExternalKnowledgeApiSetting对象。它使用ExternalKnowledgeApiSetting.parse_obj方法将字典转换为对象。
     @staticmethod
     def get_external_knowledge_api_settings(settings: dict) -> ExternalKnowledgeApiSetting:
         return ExternalKnowledgeApiSetting.parse_obj(settings)
 
+    # cdg:创建外部数据集，主要用于创建新的外部数据集。它首先检查数据集名称是否已存在，然后获取外部知识库API配置，并创建新的Dataset对象。最后，它创建ExternalKnowledgeBindings对象，并将其添加到数据库中。
     @staticmethod
     def create_external_dataset(tenant_id: str, user_id: str, args: dict) -> Dataset:
         # check if dataset name already exists
@@ -243,6 +261,7 @@ class ExternalDatasetService:
 
         return dataset
 
+    # cdg:获取外部知识库检索，主要用于根据数据集ID、查询语句和检索参数获取外部知识库检索结果。它首先获取外部知识库绑定配置，然后获取外部知识库API配置，并组装请求参数。最后，它调用process_external_api方法处理外部API请求，并返回检索结果。
     @staticmethod
     def fetch_external_knowledge_retrieval(
         tenant_id: str, dataset_id: str, query: str, external_retrieval_parameters: dict
