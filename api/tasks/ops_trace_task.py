@@ -12,7 +12,7 @@ from extensions.ext_storage import storage
 from models.model import Message
 from models.workflow import WorkflowRun
 
-
+# cdg:处理追踪任务，此处@shared_task装饰器用于将函数注册为Celery任务，并指定任务队列为ops_trace。
 @shared_task(queue="ops_trace")
 def process_trace_tasks(file_info):
     """

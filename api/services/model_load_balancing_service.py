@@ -21,11 +21,12 @@ from models.provider import LoadBalancingModelConfig
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:模型负载均衡服务，用于管理模型负载均衡的配置、启用、禁用等操作。
 class ModelLoadBalancingService:
     def __init__(self) -> None:
         self.provider_manager = ProviderManager()
 
+    # cdg:启用模型负载均衡
     def enable_model_load_balancing(self, tenant_id: str, provider: str, model: str, model_type: str) -> None:
         """
         enable model load balancing.
@@ -47,6 +48,7 @@ class ModelLoadBalancingService:
         # Enable model load balancing
         provider_configuration.enable_model_load_balancing(model=model, model_type=ModelType.value_of(model_type))
 
+    # cdg:禁用模型负载均衡
     def disable_model_load_balancing(self, tenant_id: str, provider: str, model: str, model_type: str) -> None:
         """
         disable model load balancing.
@@ -68,6 +70,7 @@ class ModelLoadBalancingService:
         # disable model load balancing
         provider_configuration.disable_model_load_balancing(model=model, model_type=ModelType.value_of(model_type))
 
+    # cdg:获取模型负载均衡配置，单个模型负载均衡配置的信息。
     def get_load_balancing_configs(
         self, tenant_id: str, provider: str, model: str, model_type: str
     ) -> tuple[bool, list[dict]]:
@@ -135,14 +138,17 @@ class ModelLoadBalancingService:
                         inherit_config = load_balancing_configs.pop(i)
                         load_balancing_configs.insert(0, inherit_config)
 
+        # cdg:获取模型凭证表单架构
         # Get credential form schemas from model credential schema or provider credential schema
         credential_schemas = self._get_credential_schema(provider_configuration)
 
+        # cdg:获取解密RSA密钥和密码
         # Get decoding rsa key and cipher for decrypting credentials
         decoding_rsa_key, decoding_cipher_rsa = encrypter.get_decrypt_decoding(tenant_id)
-
+        # cdg:获取模型负载均衡配置
         # fetch status and ttl for each config
         datas = []
+        # cdg:遍历模型负载均衡配置，返回模型负载均衡是否在冷却期、TTL（Time To Live，存活时间）。
         for load_balancing_config in load_balancing_configs:
             in_cooldown, ttl = LBModelManager.get_config_in_cooldown_and_ttl(
                 tenant_id=tenant_id,
@@ -160,11 +166,13 @@ class ModelLoadBalancingService:
             except JSONDecodeError:
                 credentials = {}
 
+            # cdg:获取提供者凭证的秘密变量
             # Get provider credential secret variables
             credential_secret_variables = provider_configuration.extract_secret_variables(
                 credential_schemas.credential_form_schemas
             )
 
+            # cdg:解密凭证
             # decrypt credentials
             for variable in credential_secret_variables:
                 if variable in credentials:
@@ -175,6 +183,7 @@ class ModelLoadBalancingService:
                     except ValueError:
                         pass
 
+            # cdg:凭证合并
             # Obfuscate credentials
             credentials = provider_configuration.obfuscated_credentials(
                 credentials=credentials, credential_form_schemas=credential_schemas.credential_form_schemas
@@ -193,6 +202,7 @@ class ModelLoadBalancingService:
 
         return is_load_balancing_enabled, datas
 
+    # cdg:获取模型负载均衡配置
     def get_load_balancing_config(
         self, tenant_id: str, provider: str, model: str, model_type: str, config_id: str
     ) -> Optional[dict]:
@@ -422,6 +432,7 @@ class ModelLoadBalancingService:
 
             self._clear_credentials_cache(tenant_id, config_id)
 
+    # cdg:验证模型负载均衡凭证
     def validate_load_balancing_credentials(
         self,
         tenant_id: str,
@@ -480,6 +491,7 @@ class ModelLoadBalancingService:
             load_balancing_model_config=load_balancing_model_config,
         )
 
+    # cdg:验证模型负载均衡凭证
     def _custom_credentials_validate(
         self,
         tenant_id: str,
@@ -545,6 +557,7 @@ class ModelLoadBalancingService:
 
         return credentials
 
+    # cdg:获取模型凭证表单架构
     def _get_credential_schema(
         self, provider_configuration: ProviderConfiguration
     ) -> Union[ModelCredentialSchema, ProviderCredentialSchema]:
@@ -556,6 +569,7 @@ class ModelLoadBalancingService:
         else:
             raise ValueError("No credential schema found")
 
+    # cdg:清除模型凭证缓存
     def _clear_credentials_cache(self, tenant_id: str, config_id: str) -> None:
         """
         Clear credentials cache.

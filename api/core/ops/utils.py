@@ -5,7 +5,7 @@ from typing import Optional, Union
 from extensions.ext_database import db
 from models.model import Message
 
-
+# cdg:过滤字典中的空值
 def filter_none_values(data: dict):
     new_data = {}
     for key, value in data.items():
@@ -17,11 +17,11 @@ def filter_none_values(data: dict):
             new_data[key] = value
     return new_data
 
-
+# cdg:根据消息ID获取消息
 def get_message_data(message_id: str):
     return db.session.query(Message).filter(Message.id == message_id).first()
 
-
+# cdg:测量时间
 @contextmanager
 def measure_time():
     timing_info = {"start": datetime.now(), "end": None}
@@ -30,7 +30,7 @@ def measure_time():
     finally:
         timing_info["end"] = datetime.now()
 
-
+# cdg:替换文本内容
 def replace_text_with_content(data):
     if isinstance(data, dict):
         new_data = {}
@@ -45,7 +45,7 @@ def replace_text_with_content(data):
     else:
         return data
 
-
+# cdg:生成LangSmith的dotted_order
 def generate_dotted_order(
     run_id: str, start_time: Union[str, datetime], parent_dotted_order: Optional[str] = None
 ) -> str:

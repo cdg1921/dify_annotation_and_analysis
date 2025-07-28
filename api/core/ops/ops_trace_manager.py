@@ -41,6 +41,7 @@ from models.model import App, AppModelConfig, Conversation, Message, MessageFile
 from models.workflow import WorkflowAppLog, WorkflowRun
 from tasks.ops_trace_task import process_trace_tasks
 
+# cdg:追踪提供者配置映射关系，目前支持Langfuse、Langsmith和Opik。
 provider_config_map: dict[str, dict[str, Any]] = {
     TracingProviderEnum.LANGFUSE.value: {
         "config_class": LangfuseConfig,
@@ -62,8 +63,9 @@ provider_config_map: dict[str, dict[str, Any]] = {
     },
 }
 
-
+# cdg:追踪管理器，用于管理追踪任务的添加、收集和发送。
 class OpsTraceManager:
+    # cdg:加密追踪配置
     @classmethod
     def encrypt_tracing_config(
         cls, tenant_id: str, tracing_provider: str, tracing_config: dict, current_trace_config=None
@@ -76,6 +78,7 @@ class OpsTraceManager:
         :param current_trace_config: current tracing configuration for keeping existing values
         :return: encrypted tracing configuration
         """
+        # cdg:获取追踪提供者配置，包括配置类、需要加密的密钥和不需要加密的密钥。
         # Get the configuration class and the keys that require encryption
         config_class, secret_keys, other_keys = (
             provider_config_map[tracing_provider]["config_class"],
@@ -84,6 +87,7 @@ class OpsTraceManager:
         )
 
         new_config = {}
+        # cdg:加密必要的密钥，如果密钥包含*，则保留原始值，否则加密密钥。
         # Encrypt necessary keys
         for key in secret_keys:
             if key in tracing_config:
@@ -94,13 +98,16 @@ class OpsTraceManager:
                     # Otherwise, encrypt the key
                     new_config[key] = encrypt_token(tenant_id, tracing_config[key])
 
+        # cdg:保留不需要加密的密钥。
         for key in other_keys:
             new_config[key] = tracing_config.get(key, "")
 
+        # cdg:创建新的配置实例，并以字典形式返回。
         # Create a new instance of the config class with the new configuration
         encrypted_config = config_class(**new_config)
         return encrypted_config.model_dump()
 
+    # cdg:解密追踪配置
     @classmethod
     def decrypt_tracing_config(cls, tenant_id: str, tracing_provider: str, tracing_config: dict):
         """
@@ -125,6 +132,7 @@ class OpsTraceManager:
 
         return config_class(**new_config).model_dump()
 
+    # cdg:混淆解密追踪配置
     @classmethod
     def obfuscated_decrypt_token(cls, tracing_provider: str, decrypt_tracing_config: dict):
         """
@@ -147,6 +155,7 @@ class OpsTraceManager:
             new_config[key] = decrypt_tracing_config.get(key, "")
         return config_class(**new_config).model_dump()
 
+    # cdg:获取解密后的追踪配置
     @classmethod
     def get_decrypted_tracing_config(cls, app_id: str, tracing_provider: str):
         """
@@ -176,6 +185,7 @@ class OpsTraceManager:
 
         return decrypt_tracing_config
 
+    # cdg:获取追踪实例
     @classmethod
     def get_ops_trace_instance(
         cls,
@@ -192,21 +202,25 @@ class OpsTraceManager:
         if app_id is None:
             return None
 
+        # cdg:根据app_id获取应用
         app: Optional[App] = db.session.query(App).filter(App.id == app_id).first()
-
+        # cdg:如果应用不存在，则返回None
         if app is None:
             return None
 
+        # cdg:获取应用的追踪配置，默认追踪配置为空。
         app_ops_trace_config = json.loads(app.tracing) if app.tracing else None
-
+        # cdg:如果追踪配置不存在，则返回None
         if app_ops_trace_config is None:
             return None
 
+        # cdg:获取追踪提供者
         tracing_provider = app_ops_trace_config.get("tracing_provider")
-
+        # cdg:如果追踪提供者不存在，则返回None
         if tracing_provider is None or tracing_provider not in provider_config_map:
             return None
 
+        # cdg:解密追踪配置
         # decrypt_token
         decrypt_trace_config = cls.get_decrypted_tracing_config(app_id, tracing_provider)
         if app_ops_trace_config.get("enabled"):
@@ -219,8 +233,10 @@ class OpsTraceManager:
 
         return None
 
+    # cdg:根据消息ID获取应用配置
     @classmethod
     def get_app_config_through_message_id(cls, message_id: str):
+        # cdg:根据消息ID获取消息
         app_model_config = None
         message_data = db.session.query(Message).filter(Message.id == message_id).first()
         if not message_data:
@@ -241,6 +257,7 @@ class OpsTraceManager:
 
         return app_model_config
 
+    # cdg:更新应用追踪配置
     @classmethod
     def update_app_tracing_config(cls, app_id: str, enabled: bool, tracing_provider: str):
         """
@@ -265,6 +282,7 @@ class OpsTraceManager:
         )
         db.session.commit()
 
+    # cdg:获取应用追踪配置
     @classmethod
     def get_app_tracing_config(cls, app_id: str):
         """
@@ -280,6 +298,7 @@ class OpsTraceManager:
         app_trace_config = json.loads(app.tracing)
         return app_trace_config
 
+    # cdg:检查追踪配置是否有效
     @staticmethod
     def check_trace_config_is_effective(tracing_config: dict, tracing_provider: str):
         """
@@ -295,6 +314,7 @@ class OpsTraceManager:
         tracing_config = config_type(**tracing_config)
         return trace_instance(tracing_config).api_check()
 
+    # cdg:获取追踪配置的project key
     @staticmethod
     def get_trace_config_project_key(tracing_config: dict, tracing_provider: str):
         """
@@ -310,6 +330,7 @@ class OpsTraceManager:
         tracing_config = config_type(**tracing_config)
         return trace_instance(tracing_config).get_project_key()
 
+    # cdg:获取追踪配置的project url
     @staticmethod
     def get_trace_config_project_url(tracing_config: dict, tracing_provider: str):
         """
@@ -325,16 +346,16 @@ class OpsTraceManager:
         tracing_config = config_type(**tracing_config)
         return trace_instance(tracing_config).get_project_url()
 
-
+# cdg:追踪任务，用于管理追踪任务的添加、收集和发送。
 class TraceTask:
     def __init__(
         self,
-        trace_type: Any,
-        message_id: Optional[str] = None,
-        workflow_run: Optional[WorkflowRun] = None,
-        conversation_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        timer: Optional[Any] = None,
+        trace_type: Any,                            # cdg:追踪类型
+        message_id: Optional[str] = None,           # cdg:消息ID
+        workflow_run: Optional[WorkflowRun] = None, # cdg:工作流运行时
+        conversation_id: Optional[str] = None,      # cdg:会话ID
+        user_id: Optional[str] = None,              # cdg:用户ID
+        timer: Optional[Any] = None,                # cdg:计时器
         **kwargs,
     ):
         self.trace_type = trace_type
@@ -351,7 +372,9 @@ class TraceTask:
     def execute(self):
         return self.preprocess()
 
+    # cdg:预处理追踪任务
     def preprocess(self):
+        # cdg:预处理追踪任务的映射关系，根据追踪类型执行不同的预处理函数。
         preprocess_map = {
             TraceTaskName.CONVERSATION_TRACE: lambda: self.conversation_trace(**self.kwargs),
             TraceTaskName.WORKFLOW_TRACE: lambda: self.workflow_trace(
@@ -381,6 +404,7 @@ class TraceTask:
     def conversation_trace(self, **kwargs):
         return kwargs
 
+    # cdg:工作流追踪，返回工作流追踪信息。
     def workflow_trace(
         self,
         *,
@@ -392,6 +416,7 @@ class TraceTask:
             return {}
 
         with Session(db.engine) as session:
+            # cdg:根据工作流运行ID获取工作流运行时状态信息
             workflow_run_stmt = select(WorkflowRun).where(WorkflowRun.id == workflow_run_id)
             workflow_run = session.scalars(workflow_run_stmt).first()
             if not workflow_run:
@@ -743,6 +768,7 @@ trace_manager_interval = int(os.getenv("TRACE_QUEUE_MANAGER_INTERVAL", 5))
 trace_manager_batch_size = int(os.getenv("TRACE_QUEUE_MANAGER_BATCH_SIZE", 100))
 
 
+# cdg:追踪任务管理器，用于管理追踪任务的添加、收集和发送。
 class TraceQueueManager:
     def __init__(self, app_id=None, user_id=None):
         global trace_manager_timer
@@ -754,6 +780,7 @@ class TraceQueueManager:
         if trace_manager_timer is None:
             self.start_timer()
 
+    # cdg:添加追踪任务
     def add_trace_task(self, trace_task: TraceTask):
         global trace_manager_timer, trace_manager_queue
         try:
@@ -765,47 +792,57 @@ class TraceQueueManager:
         finally:
             self.start_timer()
 
+    # cdg:收集追踪任务
     def collect_tasks(self):
         global trace_manager_queue
         tasks: list[TraceTask] = []
         while len(tasks) < trace_manager_batch_size and not trace_manager_queue.empty():
+            # cdg:从队列中获取追踪任务，消息队列中的get和get_nowait的区别是：get会阻塞，直到有任务可用；get_nowait不会阻塞，如果队列为空，则返回None。
             task = trace_manager_queue.get_nowait()
+            # cdg:将追踪任务添加到任务列表中
             tasks.append(task)
+            # cdg:标记任务完成
             trace_manager_queue.task_done()
         return tasks
 
+    # cdg:运行追踪任务
     def run(self):
         try:
             tasks = self.collect_tasks()
             if tasks:
+                # cdg:将追踪任务发送给Celery
                 self.send_to_celery(tasks)
         except Exception as e:
             logging.exception("Error processing trace tasks")
 
     def start_timer(self):
         global trace_manager_timer
+        # cdg:如果计时器不存在或计时器未运行，则启动计时器。
         if trace_manager_timer is None or not trace_manager_timer.is_alive():
-            trace_manager_timer = threading.Timer(trace_manager_interval, self.run)
+            trace_manager_timer = threading.Timer(trace_manager_interval, self.run)  # cdg:创建计时器，每隔trace_manager_interval秒执行一次。
             trace_manager_timer.name = f"trace_manager_timer_{time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}"
             trace_manager_timer.daemon = False
-            trace_manager_timer.start()
+            trace_manager_timer.start()  # cdg:启动计时器。
 
-    def send_to_celery(self, tasks: list[TraceTask]):
+    # cdg:将追踪任务发送给Celery
+    def send_to_celery(self, tasks: list[TraceTask]): 
         with self.flask_app.app_context():
             for task in tasks:
                 if task.app_id is None:
                     continue
                 file_id = uuid4().hex
-                trace_info = task.execute()
+                trace_info = task.execute()  # cdg:执行追踪任务，返回追踪信息。
                 task_data = TaskData(
                     app_id=task.app_id,
                     trace_info_type=type(trace_info).__name__,
                     trace_info=trace_info.model_dump() if trace_info else None,
                 )
+                # cdg:将追踪信息保存到文件系统的文件中，当异步任务执行完后，会删除该文件。
                 file_path = f"{OPS_FILE_PATH}{task.app_id}/{file_id}.json"
                 storage.save(file_path, task_data.model_dump_json().encode("utf-8"))
                 file_info = {
                     "file_id": file_id,
                     "app_id": task.app_id,
                 }
+                # cdg:将追踪信息发送给Celery
                 process_trace_tasks.delay(file_info)

@@ -26,7 +26,7 @@ from services.entities.model_provider_entities import (
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:模型提供者服务，
 class ModelProviderService:
     """
     Model Provider Service
@@ -538,6 +538,7 @@ class ModelProviderService:
         else:
             return {"type": rst["type"], "result": "success"}
 
+    # cdg:验证模型免费额度资格
     def free_quota_qualification_verify(self, tenant_id: str, provider: str, token: Optional[str]):
         api_key = os.environ.get("FREE_QUOTA_APPLY_API_KEY")
         api_base_url = os.environ.get("FREE_QUOTA_APPLY_BASE_URL", "")

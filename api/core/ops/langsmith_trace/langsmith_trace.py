@@ -33,7 +33,7 @@ from models.workflow import WorkflowNodeExecution
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:基于LangSmith的数据追踪，继承于BaseTraceInstance，实现追踪任务的处理
 class LangSmithDataTrace(BaseTraceInstance):
     def __init__(
         self,
@@ -43,9 +43,11 @@ class LangSmithDataTrace(BaseTraceInstance):
         self.langsmith_key = langsmith_config.api_key
         self.project_name = langsmith_config.project
         self.project_id = None
+        # cdg:初始化LangSmith客户端
         self.langsmith_client = Client(api_key=langsmith_config.api_key, api_url=langsmith_config.endpoint)
         self.file_base_url = os.getenv("FILES_URL", "http://127.0.0.1:5001")
 
+    # cdg:处理追踪任务，根据追踪类型执行不同的处理函数。
     def trace(self, trace_info: BaseTraceInfo):
         if isinstance(trace_info, WorkflowTraceInfo):
             self.workflow_trace(trace_info)
@@ -62,6 +64,7 @@ class LangSmithDataTrace(BaseTraceInstance):
         if isinstance(trace_info, GenerateNameTraceInfo):
             self.generate_name_trace(trace_info)
 
+    # cdg:工作流追踪，返回工作流追踪信息。
     def workflow_trace(self, trace_info: WorkflowTraceInfo):
         trace_id = trace_info.message_id or trace_info.workflow_run_id
         if trace_info.start_time is None:
@@ -242,6 +245,7 @@ class LangSmithDataTrace(BaseTraceInstance):
 
             self.add_run(langsmith_run)
 
+    # cdg:消息任务追踪
     def message_trace(self, trace_info: MessageTraceInfo):
         # get message file data
         file_list = cast(list[str], trace_info.file_list) or []
@@ -322,6 +326,7 @@ class LangSmithDataTrace(BaseTraceInstance):
         )
         self.add_run(llm_run)
 
+    # cdg:内容审核任务追踪
     def moderation_trace(self, trace_info: ModerationTraceInfo):
         if trace_info.message_data is None:
             return
@@ -356,6 +361,7 @@ class LangSmithDataTrace(BaseTraceInstance):
 
         self.add_run(langsmith_run)
 
+    # cdg:建议问题任务追踪
     def suggested_question_trace(self, trace_info: SuggestedQuestionTraceInfo):
         message_data = trace_info.message_data
         if message_data is None:
@@ -386,6 +392,7 @@ class LangSmithDataTrace(BaseTraceInstance):
 
         self.add_run(suggested_question_run)
 
+    # cdg:数据集检索任务追踪
     def dataset_retrieval_trace(self, trace_info: DatasetRetrievalTraceInfo):
         if trace_info.message_data is None:
             return
@@ -415,6 +422,7 @@ class LangSmithDataTrace(BaseTraceInstance):
 
         self.add_run(dataset_retrieval_run)
 
+    # cdg:工具调用情况追踪
     def tool_trace(self, trace_info: ToolTraceInfo):
         tool_run = LangSmithRunModel(
             name=trace_info.tool_name,
@@ -444,6 +452,7 @@ class LangSmithDataTrace(BaseTraceInstance):
 
         self.add_run(tool_run)
 
+    # cdg:生成名称任务追踪
     def generate_name_trace(self, trace_info: GenerateNameTraceInfo):
         name_run = LangSmithRunModel(
             name=TraceTaskName.GENERATE_NAME_TRACE.value,
@@ -471,20 +480,26 @@ class LangSmithDataTrace(BaseTraceInstance):
 
         self.add_run(name_run)
 
+    # cdg:添加追踪任务
     def add_run(self, run_data: LangSmithRunModel):
+        # cdg:将追踪任务转换为字典
         data = run_data.model_dump()
+        # cdg:如果项目ID存在，则将项目ID设置为会话ID
         if self.project_id:
             data["session_id"] = self.project_id
+        # cdg:如果项目名称存在，则将项目名称设置为会话名称
         elif self.project_name:
             data["session_name"] = self.project_name
-
+        # cdg:过滤字典中的空值
         data = filter_none_values(data)
+        # cdg:执行追踪任务
         try:
             self.langsmith_client.create_run(**data)
             logger.debug("LangSmith Run created successfully.")
         except Exception as e:
             raise ValueError(f"LangSmith Failed to create run: {str(e)}")
 
+    # cdg:更新追踪任务
     def update_run(self, update_run_data: LangSmithRunUpdateModel):
         data = update_run_data.model_dump()
         data = filter_none_values(data)
@@ -494,6 +509,7 @@ class LangSmithDataTrace(BaseTraceInstance):
         except Exception as e:
             raise ValueError(f"LangSmith Failed to update run: {str(e)}")
 
+    # cdg:检查API是否正常
     def api_check(self):
         try:
             random_project_name = f"test_project_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -504,6 +520,7 @@ class LangSmithDataTrace(BaseTraceInstance):
             logger.debug(f"LangSmith API check failed: {str(e)}")
             raise ValueError(f"LangSmith API check failed: {str(e)}")
 
+    # cdg:获取项目URL
     def get_project_url(self):
         try:
             run_data = RunBase(

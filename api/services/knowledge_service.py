@@ -1,8 +1,9 @@
 import boto3  # type: ignore
+# cdg:boto3是一个用于与AWS服务进行交互的Python库。
 
 from configs import dify_config
 
-
+# cdg:外部知识库检索服务，实现检索外部知识库中的数据。目前仅用于内部测试。
 class ExternalDatasetTestService:
     # this service is only for internal testing
     @staticmethod

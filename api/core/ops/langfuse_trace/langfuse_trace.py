@@ -34,20 +34,23 @@ from models.workflow import WorkflowNodeExecution
 
 logger = logging.getLogger(__name__)
 
-
+# cdg:基于LangFuse的数据追踪，继承于BaseTraceInstance，实现追踪任务的处理
 class LangFuseDataTrace(BaseTraceInstance):
     def __init__(
         self,
         langfuse_config: LangfuseConfig,
     ):
         super().__init__(langfuse_config)
+        # cdg:初始化LangFuse客户端
         self.langfuse_client = Langfuse(
             public_key=langfuse_config.public_key,
             secret_key=langfuse_config.secret_key,
             host=langfuse_config.host,
         )
+        # cdg:获取文件基础URL
         self.file_base_url = os.getenv("FILES_URL", "http://127.0.0.1:5001")
 
+    # cdg:处理追踪任务，根据追踪类型执行不同的处理函数。
     def trace(self, trace_info: BaseTraceInfo):
         if isinstance(trace_info, WorkflowTraceInfo):
             self.workflow_trace(trace_info)
@@ -64,15 +67,19 @@ class LangFuseDataTrace(BaseTraceInstance):
         if isinstance(trace_info, GenerateNameTraceInfo):
             self.generate_name_trace(trace_info)
 
+    # cdg:工作流追踪，返回工作流追踪信息。
     def workflow_trace(self, trace_info: WorkflowTraceInfo):
+        # cdg:获取工作流运行ID
         trace_id = trace_info.workflow_run_id
         user_id = trace_info.metadata.get("user_id")
         metadata = trace_info.metadata
         metadata["workflow_app_log_id"] = trace_info.workflow_app_log_id
 
+        # cdg:如果消息ID存在，则创建LangfuseTrace对象，并添加追踪任务
         if trace_info.message_id:
             trace_id = trace_info.message_id
             name = TraceTaskName.MESSAGE_TRACE.value
+            # cdg:创建LangfuseTrace对象
             trace_data = LangfuseTrace(
                 id=trace_id,
                 user_id=user_id,
@@ -83,7 +90,9 @@ class LangFuseDataTrace(BaseTraceInstance):
                 session_id=trace_info.conversation_id,
                 tags=["message", "workflow"],
             )
+            # cdg:添加追踪任务
             self.add_trace(langfuse_trace_data=trace_data)
+            # cdg:创建LangfuseSpan对象
             workflow_span_data = LangfuseSpan(
                 id=trace_info.workflow_run_id,
                 name=TraceTaskName.WORKFLOW_TRACE.value,
@@ -96,8 +105,10 @@ class LangFuseDataTrace(BaseTraceInstance):
                 level=LevelEnum.DEFAULT if trace_info.error == "" else LevelEnum.ERROR,
                 status_message=trace_info.error or "",
             )
+            # cdg:添加Span
             self.add_span(langfuse_span_data=workflow_span_data)
         else:
+            # cdg:创建LangfuseTrace对象
             trace_data = LangfuseTrace(
                 id=trace_id,
                 user_id=user_id,
@@ -107,7 +118,8 @@ class LangFuseDataTrace(BaseTraceInstance):
                 metadata=metadata,
                 session_id=trace_info.conversation_id,
                 tags=["workflow"],
-            )
+            )   
+            # cdg:添加追踪任务
             self.add_trace(langfuse_trace_data=trace_data)
 
         # through workflow_run_id get all_nodes_execution
@@ -180,6 +192,7 @@ class LangFuseDataTrace(BaseTraceInstance):
                     }
                 )
 
+            # cdg:添加Span
             # add span
             if trace_info.message_id:
                 span_data = LangfuseSpan(
@@ -211,6 +224,7 @@ class LangFuseDataTrace(BaseTraceInstance):
 
             self.add_span(langfuse_span_data=span_data)
 
+            # cdg:如果节点执行数据存在，且模型模式为chat，则添加生成
             if process_data and process_data.get("model_mode") == "chat":
                 total_token = metadata.get("total_tokens", 0)
                 # add generation
@@ -401,14 +415,18 @@ class LangFuseDataTrace(BaseTraceInstance):
         )
         self.add_span(langfuse_span_data=name_generation_span_data)
 
+    # cdg:添加追踪任务
     def add_trace(self, langfuse_trace_data: Optional[LangfuseTrace] = None):
+        # cdg:过滤字典中的空值，并转换为字典
         format_trace_data = filter_none_values(langfuse_trace_data.model_dump()) if langfuse_trace_data else {}
+        # cdg:执行追踪任务
         try:
             self.langfuse_client.trace(**format_trace_data)
             logger.debug("LangFuse Trace created successfully")
         except Exception as e:
             raise ValueError(f"LangFuse Failed to create trace: {str(e)}")
 
+    # cdg:添加Span，span是trace的子任务，用于追踪任务的执行过程。
     def add_span(self, langfuse_span_data: Optional[LangfuseSpan] = None):
         format_span_data = filter_none_values(langfuse_span_data.model_dump()) if langfuse_span_data else {}
         try:
@@ -417,21 +435,25 @@ class LangFuseDataTrace(BaseTraceInstance):
         except Exception as e:
             raise ValueError(f"LangFuse Failed to create span: {str(e)}")
 
+    # cdg:更新Span
     def update_span(self, span, langfuse_span_data: Optional[LangfuseSpan] = None):
         format_span_data = filter_none_values(langfuse_span_data.model_dump()) if langfuse_span_data else {}
 
         span.end(**format_span_data)
 
+    # cdg:添加生成任务
     def add_generation(self, langfuse_generation_data: Optional[LangfuseGeneration] = None):
         format_generation_data = (
             filter_none_values(langfuse_generation_data.model_dump()) if langfuse_generation_data else {}
         )
         try:
+            # cdg:执行生成任务
             self.langfuse_client.generation(**format_generation_data)
             logger.debug("LangFuse Generation created successfully")
         except Exception as e:
             raise ValueError(f"LangFuse Failed to create generation: {str(e)}")
 
+    # cdg:更新生成任务
     def update_generation(self, generation, langfuse_generation_data: Optional[LangfuseGeneration] = None):
         format_generation_data = (
             filter_none_values(langfuse_generation_data.model_dump()) if langfuse_generation_data else {}
@@ -439,6 +461,7 @@ class LangFuseDataTrace(BaseTraceInstance):
 
         generation.end(**format_generation_data)
 
+    # cdg:检查API是否正常
     def api_check(self):
         try:
             return self.langfuse_client.auth_check()
@@ -446,6 +469,7 @@ class LangFuseDataTrace(BaseTraceInstance):
             logger.debug(f"LangFuse API check failed: {str(e)}")
             raise ValueError(f"LangFuse API check failed: {str(e)}")
 
+    # cdg:获取项目ID
     def get_project_key(self):
         try:
             projects = self.langfuse_client.client.projects.get()

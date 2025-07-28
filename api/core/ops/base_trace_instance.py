@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from core.ops.entities.config_entity import BaseTracingConfig
 from core.ops.entities.trace_entity import BaseTraceInfo
 
-
+# cdg:基础追踪实例，用于管理追踪任务的添加、收集和发送。
 class BaseTraceInstance(ABC):
     """
     Base trace instance for ops trace services
