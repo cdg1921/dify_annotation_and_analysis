@@ -26,15 +26,20 @@ from services.entities.model_provider_entities import (
 
 logger = logging.getLogger(__name__)
 
-# cdg:模型提供者服务，
+# cdg:模型提供商服务
 class ModelProviderService:
     """
     Model Provider Service
     """
-
     def __init__(self) -> None:
+        # cdg:初始化模型提供商管理器
         self.provider_manager = ProviderManager()
 
+    # cdg:获取提供商列表，具体实现思路：
+    # 1. 获取当前工作区的所有提供商配置
+    # 2. 遍历提供商配置，根据模型类型过滤提供商
+    # 3. 创建提供商响应对象
+    # 4. 返回提供商列表
     def get_provider_list(self, tenant_id: str, model_type: Optional[str] = None) -> list[ProviderResponse]:
         """
         get provider list.
@@ -43,9 +48,11 @@ class ModelProviderService:
         :param model_type: model type
         :return:
         """
+        # cdg:根据租户ID获取当前工作区的所有提供商配置
         # Get all provider configurations of the current workspace
         provider_configurations = self.provider_manager.get_configurations(tenant_id)
 
+        # cdg:遍历提供商配置，根据模型类型过滤提供商
         provider_responses = []
         for provider_configuration in provider_configurations.values():
             if model_type:
@@ -53,6 +60,7 @@ class ModelProviderService:
                 if model_type_entity not in provider_configuration.provider.supported_model_types:
                     continue
 
+            # cdg:创建提供商响应对象
             provider_response = ProviderResponse(
                 provider=provider_configuration.provider.provider,
                 label=provider_configuration.provider.label,
@@ -82,6 +90,11 @@ class ModelProviderService:
 
         return provider_responses
 
+    # cdg:根据租户ID和提供商名称获取提供商模型列表，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称过滤提供商模型列表
+    # 3. 创建提供商模型响应对象
+    # 4. 返回提供商模型列表
     def get_models_by_provider(self, tenant_id: str, provider: str) -> list[ModelWithProviderEntityResponse]:
         """
         get provider models.
@@ -100,6 +113,10 @@ class ModelProviderService:
             ModelWithProviderEntityResponse(model) for model in provider_configurations.get_models(provider=provider)
         ]
 
+    # cdg:根据租户ID和提供商名称获取提供商凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 返回提供商凭证
     def get_provider_credentials(self, tenant_id: str, provider: str):
         """
         get provider credentials.
@@ -111,6 +128,10 @@ class ModelProviderService:
 
         return provider_configuration.get_custom_credentials(obfuscated=True)
 
+    # cdg:验证提供商凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 验证提供商凭证
     def provider_credentials_validate(self, tenant_id: str, provider: str, credentials: dict) -> None:
         """
         validate provider credentials.
@@ -129,6 +150,10 @@ class ModelProviderService:
 
         provider_configuration.custom_credentials_validate(credentials)
 
+    # cdg:保存提供商凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 保存提供商凭证
     def save_provider_credentials(self, tenant_id: str, provider: str, credentials: dict) -> None:
         """
         save custom provider config.
@@ -149,6 +174,10 @@ class ModelProviderService:
         # Add or update custom provider credentials.
         provider_configuration.add_or_update_custom_credentials(credentials)
 
+    # cdg:删除提供商凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 删除提供商凭证
     def remove_provider_credentials(self, tenant_id: str, provider: str) -> None:
         """
         remove custom provider config.
@@ -168,6 +197,10 @@ class ModelProviderService:
         # Remove custom provider credentials.
         provider_configuration.delete_custom_credentials()
 
+    # cdg:根据租户ID、提供商名称、模型类型和模型名称获取模型凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 根据模型类型和模型名称获取模型凭证
     def get_model_credentials(self, tenant_id: str, provider: str, model_type: str, model: str):
         """
         get model credentials.
@@ -191,6 +224,10 @@ class ModelProviderService:
             model_type=ModelType.value_of(model_type), model=model, obfuscated=True
         )
 
+    # cdg:验证模型凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 验证模型凭证
     def model_credentials_validate(
         self, tenant_id: str, provider: str, model_type: str, model: str, credentials: dict
     ) -> None:
@@ -217,6 +254,10 @@ class ModelProviderService:
             model_type=ModelType.value_of(model_type), model=model, credentials=credentials
         )
 
+    # cdg:保存模型凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 保存模型凭证
     def save_model_credentials(
         self, tenant_id: str, provider: str, model_type: str, model: str, credentials: dict
     ) -> None:
@@ -243,6 +284,10 @@ class ModelProviderService:
             model_type=ModelType.value_of(model_type), model=model, credentials=credentials
         )
 
+    # cdg:删除模型凭证，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 删除模型凭证
     def remove_model_credentials(self, tenant_id: str, provider: str, model_type: str, model: str) -> None:
         """
         remove model credentials.
@@ -264,6 +309,11 @@ class ModelProviderService:
         # Remove custom model credentials
         provider_configuration.delete_custom_model_credentials(model_type=ModelType.value_of(model_type), model=model)
 
+    # cdg:根据模型类型获取模型列表，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据模型类型过滤模型列表
+    # 3. 创建提供商模型响应对象
+    # 4. 返回提供商模型列表
     def get_models_by_model_type(self, tenant_id: str, model_type: str) -> list[ProviderWithModelsResponse]:
         """
         get models by model type.
@@ -325,6 +375,11 @@ class ModelProviderService:
 
         return providers_with_models
 
+    # cdg:根据租户ID、提供商名称和模型名称获取模型参数规则，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 根据模型类型获取模型实例
+    # 4. 获取模型参数规则
     def get_model_parameter_rules(self, tenant_id: str, provider: str, model: str) -> list[ParameterRule]:
         """
         get model parameter rules.
@@ -356,6 +411,11 @@ class ModelProviderService:
         # Call get_parameter_rules method of model instance to get model parameter rules
         return list(model_type_instance.get_parameter_rules(model=model, credentials=credentials))
 
+    # cdg:根据租户ID和模型类型获取默认模型，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据模型类型获取默认模型
+    # 3. 创建默认模型响应对象
+    # 4. 返回默认模型
     def get_default_model_of_model_type(self, tenant_id: str, model_type: str) -> Optional[DefaultModelResponse]:
         """
         get default model of model type.
@@ -386,6 +446,10 @@ class ModelProviderService:
             logger.info(f"get_default_model_of_model_type error: {e}")
             return None
 
+    # cdg:更新默认模型，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据模型类型获取默认模型
+    # 3. 更新默认模型
     def update_default_model_of_model_type(self, tenant_id: str, model_type: str, provider: str, model: str) -> None:
         """
         update default model of model type.
@@ -401,6 +465,10 @@ class ModelProviderService:
             tenant_id=tenant_id, model_type=model_type_enum, provider=provider, model=model
         )
 
+    # cdg:获取模型提供商图标，具体实现思路：
+    # 1. 根据提供商名称获取提供商实例
+    # 2. 获取提供商图标
+    # 3. 返回提供商图标
     def get_model_provider_icon(
         self, provider: str, icon_type: str, lang: str
     ) -> tuple[Optional[bytes], Optional[str]]:
@@ -452,6 +520,10 @@ class ModelProviderService:
         byte_data = Path(file_path).read_bytes()
         return byte_data, mimetype
 
+    # cdg:切换首选提供商，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 切换首选提供商类型
     def switch_preferred_provider(self, tenant_id: str, provider: str, preferred_provider_type: str) -> None:
         """
         switch preferred provider.
@@ -475,6 +547,10 @@ class ModelProviderService:
         # Switch preferred provider type
         provider_configuration.switch_preferred_provider_type(preferred_provider_type_enum)
 
+    # cdg:启用模型，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 启用模型
     def enable_model(self, tenant_id: str, provider: str, model: str, model_type: str) -> None:
         """
         enable model.
@@ -496,6 +572,10 @@ class ModelProviderService:
         # Enable model
         provider_configuration.enable_model(model=model, model_type=ModelType.value_of(model_type))
 
+    # cdg:禁用模型，具体实现思路：
+    # 1. 根据租户ID获取当前工作区的所有提供商配置
+    # 2. 根据提供商名称获取提供商配置
+    # 3. 禁用模型
     def disable_model(self, tenant_id: str, provider: str, model: str, model_type: str) -> None:
         """
         disable model.
@@ -517,6 +597,11 @@ class ModelProviderService:
         # Enable model
         provider_configuration.disable_model(model=model, model_type=ModelType.value_of(model_type))
 
+    # cdg:提交模型免费额度申请，具体实现思路：
+    # 1. 获取模型免费额度申请API密钥和基础URL
+    # 2. 构建API请求URL
+    # 3. 发送POST请求
+    # 4. 处理响应结果
     def free_quota_submit(self, tenant_id: str, provider: str):
         api_key = os.environ.get("FREE_QUOTA_APPLY_API_KEY")
         api_base_url = os.environ.get("FREE_QUOTA_APPLY_BASE_URL", "")
@@ -538,7 +623,11 @@ class ModelProviderService:
         else:
             return {"type": rst["type"], "result": "success"}
 
-    # cdg:验证模型免费额度资格
+    # cdg:验证模型免费额度资格，具体实现思路：
+    # 1. 获取模型免费额度申请API密钥和基础URL
+    # 2. 构建API请求URL
+    # 3. 发送POST请求
+    # 4. 处理响应结果
     def free_quota_qualification_verify(self, tenant_id: str, provider: str, token: Optional[str]):
         api_key = os.environ.get("FREE_QUOTA_APPLY_API_KEY")
         api_base_url = os.environ.get("FREE_QUOTA_APPLY_BASE_URL", "")

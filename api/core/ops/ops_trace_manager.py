@@ -123,13 +123,16 @@ class OpsTraceManager:
             provider_config_map[tracing_provider]["other_keys"],
         )
         new_config = {}
+        # cdg:解密必要的密钥，如果密钥包含*，则保留原始值，否则解密密钥。
         for key in secret_keys:
             if key in tracing_config:
                 new_config[key] = decrypt_token(tenant_id, tracing_config[key])
 
+        # cdg:保留不需要解密的密钥。
         for key in other_keys:
             new_config[key] = tracing_config.get(key, "")
 
+        # cdg:创建新的配置实例，并以字典形式返回。
         return config_class(**new_config).model_dump()
 
     # cdg:混淆解密追踪配置
@@ -147,10 +150,12 @@ class OpsTraceManager:
             provider_config_map[tracing_provider]["other_keys"],
         )
         new_config = {}
+        # cdg:混淆必要的密钥，如果密钥包含*，则保留原始值，否则混淆密钥。
         for key in secret_keys:
             if key in decrypt_tracing_config:
                 new_config[key] = obfuscated_token(decrypt_tracing_config[key])
 
+        # cdg:保留不需要混淆的密钥。
         for key in other_keys:
             new_config[key] = decrypt_tracing_config.get(key, "")
         return config_class(**new_config).model_dump()

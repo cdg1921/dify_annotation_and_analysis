@@ -4,8 +4,14 @@ from core.ops.ops_trace_manager import OpsTraceManager, provider_config_map
 from extensions.ext_database import db
 from models.model import App, TraceAppConfig
 
-
+# cdg:运维服务，主要用于获取和更新追踪应用配置。
 class OpsService:
+    # cdg:获取追踪应用配置，具体实现思路：
+    # 1. 根据应用ID和追踪提供者获取追踪应用配置
+    # 2. 如果追踪应用配置不存在，则返回None
+    # 3. 解密追踪应用配置
+    # 4. 获取追踪应用配置的URL
+    # 5. 返回追踪应用配置
     @classmethod
     def get_tracing_app_config(cls, app_id: str, tracing_provider: str):
         """
@@ -14,6 +20,7 @@ class OpsService:
         :param tracing_provider: tracing provider
         :return:
         """
+        # cdg:根据应用ID和追踪提供者从数据库中获取追踪应用配置。TraceAppConfig表中的数据默认为空，所以需要判断是否存在。
         trace_config_data: Optional[TraceAppConfig] = (
             db.session.query(TraceAppConfig)
             .filter(TraceAppConfig.app_id == app_id, TraceAppConfig.tracing_provider == tracing_provider)
@@ -23,14 +30,17 @@ class OpsService:
         if not trace_config_data:
             return None
 
+        # cdg:解密追踪应用配置
         # decrypt_token and obfuscated_token
         tenant = db.session.query(App).filter(App.id == app_id).first()
         if not tenant:
             return None
         tenant_id = tenant.tenant_id
+        # cdg:解密追踪应用配置
         decrypt_tracing_config = OpsTraceManager.decrypt_tracing_config(
             tenant_id, tracing_provider, trace_config_data.tracing_config
         )
+
         new_decrypt_tracing_config = OpsTraceManager.obfuscated_decrypt_token(tracing_provider, decrypt_tracing_config)
 
         if tracing_provider == "langfuse" and (
@@ -71,6 +81,13 @@ class OpsService:
         trace_config_data.tracing_config = new_decrypt_tracing_config
         return trace_config_data.to_dict()
 
+    # cdg:创建追踪应用配置，具体实现思路：
+    # 1. 检查追踪提供者是否有效
+    # 2. 获取项目URL
+    # 3. 检查追踪应用配置是否存在
+    # 4. 获取租户ID
+    # 5. 加密追踪应用配置
+    # 6. 创建追踪应用配置
     @classmethod
     def create_tracing_app_config(cls, app_id: str, tracing_provider: str, tracing_config: dict):
         """
@@ -80,9 +97,11 @@ class OpsService:
         :param tracing_config: tracing config
         :return:
         """
+        # cdg:检查追踪提供者是否有效
         if tracing_provider not in provider_config_map and tracing_provider:
             return {"error": f"Invalid tracing provider: {tracing_provider}"}
 
+        # cdg:获取追踪提供者配置
         config_class, other_keys = (
             provider_config_map[tracing_provider]["config_class"],
             provider_config_map[tracing_provider]["other_keys"],
@@ -134,6 +153,13 @@ class OpsService:
 
         return {"result": "success"}
 
+    # cdg:更新追踪应用配置，具体实现思路：
+    # 1. 检查追踪提供者是否有效
+    # 2. 检查追踪应用配置是否存在
+    # 3. 获取租户ID
+    # 4. 加密追踪应用配置
+    # 5. 检查追踪应用配置是否有效
+    # 6. 更新追踪应用配置
     @classmethod
     def update_tracing_app_config(cls, app_id: str, tracing_provider: str, tracing_config: dict):
         """
@@ -176,6 +202,10 @@ class OpsService:
 
         return current_trace_config.to_dict()
 
+    # cdg:删除追踪应用配置，具体实现思路：
+    # 1. 检查追踪应用配置是否存在
+    # 2. 删除追踪应用配置
+    # 3. 返回删除结果
     @classmethod
     def delete_tracing_app_config(cls, app_id: str, tracing_provider: str):
         """
