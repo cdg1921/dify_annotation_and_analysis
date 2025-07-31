@@ -7,6 +7,7 @@ from core.rag.index_processor.processor.parent_child_index_processor import Pare
 from core.rag.index_processor.processor.qa_index_processor import QAIndexProcessor
 
 
+# cdg: 索引处理器工厂，用于根据不同的索引方式初始化不同的索引处理器。
 class IndexProcessorFactory:
     """IndexProcessorInit."""
 

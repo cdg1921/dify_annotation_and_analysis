@@ -12,8 +12,9 @@ from models.dataset import ChildChunk, Dataset, DatasetProcessRule, DocumentSegm
 from models.dataset import Document as DatasetDocument
 from services.entities.knowledge_entities.knowledge_entities import ParentMode
 
-
+# cdg: 向量服务，实现向量的创建、更新、删除和子块的生成。RAG模块关键类之一。
 class VectorService:
+    # cdg: 创建段落向量。这里的段落（segment）指的是文档中的一个文本切块，而不是我们通常理解的自然段落。
     @classmethod
     def create_segments_vector(
         cls, keywords_list: Optional[list[list[str]]], segments: list[DocumentSegment], dataset: Dataset, doc_form: str
@@ -21,9 +22,11 @@ class VectorService:
         documents = []
 
         for segment in segments:
+            # cdg: 如果文档格式为父子索引，则需要处理父子关系。
             if doc_form == IndexType.PARENT_CHILD_INDEX:
                 document = DatasetDocument.query.filter_by(id=segment.document_id).first()
                 # get the process rule
+                # cdg: 获取处理规则，如果处理规则不存在，则抛出异常。
                 processing_rule = (
                     db.session.query(DatasetProcessRule)
                     .filter(DatasetProcessRule.id == document.dataset_process_rule_id)
@@ -32,10 +35,12 @@ class VectorService:
                 if not processing_rule:
                     raise ValueError("No processing rule found.")
                 # get embedding model instance
+                # cdg: 针对高质量索引，获取嵌入模型实例，如果嵌入模型实例不存在，则抛出异常。
                 if dataset.indexing_technique == "high_quality":
                     # check embedding model setting
+                    # cdg: 实例化模型管理器。
                     model_manager = ModelManager()
-
+                    # cdg: 如果嵌入模型提供者存在，则获取嵌入模型实例，否则获取默认嵌入模型实例。
                     if dataset.embedding_model_provider:
                         embedding_model_instance = model_manager.get_model_instance(
                             tenant_id=dataset.tenant_id,
@@ -50,8 +55,10 @@ class VectorService:
                         )
                 else:
                     raise ValueError("The knowledge base index technique is not high quality!")
+                # cdg: 调用generate_child_chunks方法，生成子块。
                 cls.generate_child_chunks(segment, document, dataset, embedding_model_instance, processing_rule, False)
             else:
+                # cdg: 如果文档格式为普通索引（非父子索引），则直接创建文本块。这里的Document对象是一个文本块及其元数据，而非一个文档。
                 document = Document(
                     page_content=segment.content,
                     metadata={
@@ -63,7 +70,11 @@ class VectorService:
                 )
                 documents.append(document)
         if len(documents) > 0:
+            # cdg: 初始化索引处理器。IndexProcessorFactory中包含ParagraphIndexProcessor、QAIndexProcessor、ParentChildIndexProcessor等3种不同索引方式。
             index_processor = IndexProcessorFactory(doc_form).init_index_processor()
+            # cdg: load函数实现加载文档到索引处理器，具体实现方式详看每种索引方式（如ParagraphIndexProcessor）的实现。如/api/core/rag/index_processor/processor/paragraph_index_processor.py中的load方法。
+            # cdg: 然后再在load方法中调用向量库vector.create(documents)，将文档添加到向量库中。
+            # cdg: create方法的具体实现详看各向量库供应商的实现，默认为weaviate向量库，其路径：/api/core/rag/index_processor/processor/paragraph_index_processor.py
             index_processor.load(dataset, documents, with_keywords=True, keywords_list=keywords_list)
 
     @classmethod

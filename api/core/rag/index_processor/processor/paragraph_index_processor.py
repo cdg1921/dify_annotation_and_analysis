@@ -81,6 +81,9 @@ class ParagraphIndexProcessor(BaseIndexProcessor):
         return all_documents
 
     # cdg:知识入库
+    # cdg: load函数实现加载文档到索引处理器，具体实现方式详看每种索引方式（如ParagraphIndexProcessor）的实现。如/api/core/rag/index_processor/processor/paragraph_index_processor.py中的load方法。
+    # cdg: 然后再在load方法中调用向量库vector.create(documents)，将文档添加到向量库中。
+    # cdg: create方法的具体实现详看各向量库供应商的实现，默认为weaviate向量库，其路径：/api/core/rag/index_processor/processor/paragraph_index_processor.py
     def load(self, dataset: Dataset, documents: list[Document], with_keywords: bool = True, **kwargs):
         # cdg:如果是高质量召回，则将每个文本块向量化入库；如果是经济模式，则对每个文本块抽取关键词，构建倒排索引表，添加到关键词表中
         if dataset.indexing_technique == "high_quality":

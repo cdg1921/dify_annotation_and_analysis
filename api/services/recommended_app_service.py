@@ -3,7 +3,7 @@ from typing import Optional
 from configs import dify_config
 from services.recommend_app.recommend_app_factory import RecommendAppRetrievalFactory
 
-
+# cdg: 推荐应用服务，用于获取推荐应用和类别。
 class RecommendedAppService:
     @classmethod
     def get_recommended_apps_and_categories(cls, language: str) -> dict:

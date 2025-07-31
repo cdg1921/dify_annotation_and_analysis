@@ -17,6 +17,7 @@ from extensions.ext_redis import redis_client
 from models.dataset import Dataset
 
 
+# cdg: Weaviate配置类，用于配置Weaviate的连接信息。
 class WeaviateConfig(BaseModel):
     endpoint: str
     api_key: Optional[str] = None

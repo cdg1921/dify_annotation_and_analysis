@@ -158,6 +158,9 @@ class Vector:
 
     # cdg:以下函数具体实现详看CacheEmbedding和向量库供应商具体实例，其中self._embeddings是CacheEmbedding的实例，CacheEmbedding实现对document（文本段）和query的向量化
     # cdg:self._vector_processor详看get_vector_factory中对应的供应商实例
+    # cdg: vector_service中的load函数实现加载文档到索引处理器，具体实现方式详看每种索引方式（如ParagraphIndexProcessor）的实现。如/api/core/rag/index_processor/processor/paragraph_index_processor.py中的load方法。
+    # cdg: 然后再在load方法中调用向量库vector.create(documents)，将文档添加到向量库中。
+    # cdg: create方法的具体实现详看各向量库供应商的实现，默认为weaviate向量库，其路径：/api/core/rag/index_processor/processor/paragraph_index_processor.py
     def create(self, texts: Optional[list] = None, **kwargs):
         if texts:
             embeddings = self._embeddings.embed_documents([document.page_content for document in texts])

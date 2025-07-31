@@ -7,8 +7,9 @@ from models.model import App, EndUser
 from models.web import SavedMessage
 from services.message_service import MessageService
 
-
+# cdg: 保存消息服务，实现消息的保存和删除。
 class SavedMessageService:
+    # cdg: 分页获取保存的消息。
     @classmethod
     def pagination_by_last_id(
         cls, app_model: App, user: Optional[Union[Account, EndUser]], last_id: Optional[str], limit: int
@@ -31,6 +32,7 @@ class SavedMessageService:
             app_model=app_model, user=user, last_id=last_id, limit=limit, include_ids=message_ids
         )
 
+    # cdg: 保存消息。
     @classmethod
     def save(cls, app_model: App, user: Optional[Union[Account, EndUser]], message_id: str):
         if not user:
@@ -61,6 +63,7 @@ class SavedMessageService:
         db.session.add(saved_message)
         db.session.commit()
 
+    # cdg: 删除消息。
     @classmethod
     def delete(cls, app_model: App, user: Optional[Union[Account, EndUser]], message_id: str):
         if not user:
