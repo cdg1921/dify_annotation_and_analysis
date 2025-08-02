@@ -8,8 +8,10 @@ from libs.login import login_required
 from models.model import AppMode
 from services.agent_service import AgentService
 
-
+# cdg: 获取agent日志
 class AgentLogApi(Resource):
+
+    # cdg: 获取agent日志
     @setup_required
     @login_required
     @account_initialization_required
@@ -24,5 +26,5 @@ class AgentLogApi(Resource):
 
         return AgentService.get_agent_logs(app_model, args["conversation_id"], args["message_id"])
 
-
+# cdg: 添加agent日志API资源
 api.add_resource(AgentLogApi, "/apps/<uuid:app_id>/agent/logs")

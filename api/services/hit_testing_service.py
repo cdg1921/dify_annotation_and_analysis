@@ -36,6 +36,7 @@ class HitTestingService:
         external_retrieval_model: dict,
         limit: int = 10,
     ) -> dict:
+        # cdg: 检查知识库是否可用（没有文档或段落），如果不可用则返回空结果
         if dataset.available_document_count == 0 or dataset.available_segment_count == 0:
             return {
                 "query": {
@@ -47,6 +48,7 @@ class HitTestingService:
 
         start = time.perf_counter()
 
+        # cdg: 获取检索方法，如果未设置则使用默认模型
         # get retrieval model , if the model is not setting , using default
         if not retrieval_model:
             retrieval_model = dataset.retrieval_model or default_retrieval_model

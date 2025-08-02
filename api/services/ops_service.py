@@ -4,7 +4,7 @@ from core.ops.ops_trace_manager import OpsTraceManager, provider_config_map
 from extensions.ext_database import db
 from models.model import App, TraceAppConfig
 
-# cdg:运维服务，主要用于获取和更新追踪应用配置。
+# cdg:运维服务，主要用于获取和更新追踪应用配置。该功能默认关闭，需要手动开启。
 class OpsService:
     # cdg:获取追踪应用配置，具体实现思路：
     # 1. 根据应用ID和追踪提供者获取追踪应用配置
