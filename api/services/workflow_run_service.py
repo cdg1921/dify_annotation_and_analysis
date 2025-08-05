@@ -10,8 +10,9 @@ from models.workflow import (
     WorkflowRun,
 )
 
-
+# cdg: 工作流运行服务，用于管理工作流运行任务的创建、删除、查询等操作。
 class WorkflowRunService:
+    # cdg: 分页查询高级对话工作流运行。
     def get_paginate_advanced_chat_workflow_runs(self, app_model: App, args: dict) -> InfiniteScrollPagination:
         """
         Get advanced chat app workflow run list
@@ -31,6 +32,7 @@ class WorkflowRunService:
             def __getattr__(self, item):
                 return getattr(self._workflow_run, item)
 
+        # cdg: 根据app_model和相关参数分页查询工作流运行情况
         pagination = self.get_paginate_workflow_runs(app_model, args)
 
         with_message_workflow_runs = []

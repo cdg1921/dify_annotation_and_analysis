@@ -8,8 +8,9 @@ from models import App, EndUser, WorkflowAppLog, WorkflowRun
 from models.enums import CreatedByRole
 from models.workflow import WorkflowRunStatus
 
-
+# cdg: 工作流应用服务，用于管理工作流应用的创建、删除、查询等操作。
 class WorkflowAppService:
+    # cdg: 分页查询工作流应用日志。
     def get_paginate_workflow_app_logs(self, app_model: App, args: dict) -> Pagination:
         """
         Get paginate workflow app logs

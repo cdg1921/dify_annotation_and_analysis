@@ -49,6 +49,7 @@ class VectorService:
                             model=dataset.embedding_model,
                         )
                     else:
+                        # cdg: 获取默认嵌入模型实例。
                         embedding_model_instance = model_manager.get_default_model_instance(
                             tenant_id=dataset.tenant_id,
                             model_type=ModelType.TEXT_EMBEDDING,
@@ -72,11 +73,12 @@ class VectorService:
         if len(documents) > 0:
             # cdg: 初始化索引处理器。IndexProcessorFactory中包含ParagraphIndexProcessor、QAIndexProcessor、ParentChildIndexProcessor等3种不同索引方式。
             index_processor = IndexProcessorFactory(doc_form).init_index_processor()
-            # cdg: load函数实现加载文档到索引处理器，具体实现方式详看每种索引方式（如ParagraphIndexProcessor）的实现。如/api/core/rag/index_processor/processor/paragraph_index_processor.py中的load方法。
+            # cdg: load函数实现加载文档到索引处理器（向量库），具体实现方式详看每种索引方式（如ParagraphIndexProcessor）的实现。如/api/core/rag/index_processor/processor/paragraph_index_processor.py中的load方法。
             # cdg: 然后再在load方法中调用向量库vector.create(documents)，将文档添加到向量库中。
             # cdg: create方法的具体实现详看各向量库供应商的实现，默认为weaviate向量库，其路径：/api/core/rag/index_processor/processor/paragraph_index_processor.py
             index_processor.load(dataset, documents, with_keywords=True, keywords_list=keywords_list)
 
+    # cdg: 更新文本块向量。
     @classmethod
     def update_segment_vector(cls, keywords: Optional[list[str]], segment: DocumentSegment, dataset: Dataset):
         # update segment index task
@@ -91,30 +93,33 @@ class VectorService:
                 "dataset_id": segment.dataset_id,
             },
         )
+        # cdg: 首先删除旧的向量，然后添加新的向量。
         if dataset.indexing_technique == "high_quality":
             # update vector index
             vector = Vector(dataset=dataset)
             vector.delete_by_ids([segment.index_node_id])
             vector.add_texts([document], duplicate_check=True)
 
+        # cdg: 更新关键词索引。
         # update keyword index
         keyword = Keyword(dataset)
         keyword.delete_by_ids([segment.index_node_id])
-
+        
         # save keyword index
         if keywords and len(keywords) > 0:
             keyword.add_texts([document], keywords_list=[keywords])
         else:
             keyword.add_texts([document])
 
+    # cdg: 生成子块。ChildChunk功能的实现是先将文档切分为父块，再根据父块生成子块，然后根据子块生成子块的子块，以此类推。
     @classmethod
     def generate_child_chunks(
         cls,
-        segment: DocumentSegment,
+        segment: DocumentSegment, # cdg: 父块
         dataset_document: DatasetDocument,
         dataset: Dataset,
         embedding_model_instance: ModelInstance,
-        processing_rule: DatasetProcessRule,
+        processing_rule: DatasetProcessRule, # cdg: 切分规则，用于切分父块。如自动切分、手动切分、按字数切分等。
         regenerate: bool = False,
     ):
         index_processor = IndexProcessorFactory(dataset.doc_form).init_index_processor()
@@ -145,7 +150,7 @@ class VectorService:
         # save child chunks
         if documents and documents[0].children:
             index_processor.load(dataset, documents)
-
+            # cdg: 将子块保存到数据库。
             for position, child_chunk in enumerate(documents[0].children, start=1):
                 child_segment = ChildChunk(
                     tenant_id=dataset.tenant_id,
@@ -163,6 +168,7 @@ class VectorService:
                 db.session.add(child_segment)
         db.session.commit()
 
+    # cdg: 创建子块向量。
     @classmethod
     def create_child_chunk_vector(cls, child_segment: ChildChunk, dataset: Dataset):
         child_document = Document(
@@ -177,8 +183,9 @@ class VectorService:
         if dataset.indexing_technique == "high_quality":
             # save vector index
             vector = Vector(dataset=dataset)
-            vector.add_texts([child_document], duplicate_check=True)
+            vector.add_texts([child_document], duplicate_check=True) # cdg: 将子块添加到向量库中，duplicate_check=True表示如果向量库中已存在该向量，则不添加。
 
+    # cdg: 更新子块向量。
     @classmethod
     def update_child_chunk_vector(
         cls,
@@ -222,6 +229,7 @@ class VectorService:
             if documents:
                 vector.add_texts(documents, duplicate_check=True)
 
+    # cdg: 删除子块向量。
     @classmethod
     def delete_child_chunk_vector(cls, child_chunk: ChildChunk, dataset: Dataset):
         vector = Vector(dataset=dataset)

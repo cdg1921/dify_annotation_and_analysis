@@ -11,8 +11,9 @@ from extensions.ext_redis import redis_client
 from extensions.ext_storage import storage
 from services.auth.api_key_auth_service import ApiKeyAuthService
 
-
+# cdg: 网站服务，用于管理网站的爬取、解析等操作。
 class WebsiteService:
+    # cdg: 验证文档创建参数。
     @classmethod
     def document_create_args_validate(cls, args: dict):
         if "url" not in args or not args["url"]:
@@ -22,12 +23,15 @@ class WebsiteService:
         if "limit" not in args["options"] or not args["options"]["limit"]:
             raise ValueError("limit is required")
 
+    # cdg: 爬取网站数据。
     @classmethod
     def crawl_url(cls, args: dict) -> dict:
         provider = args.get("provider", "")
         url = args.get("url")
         options = args.get("options", "")
+        # cdg: 获取网站爬取凭证。   
         credentials = ApiKeyAuthService.get_auth_credentials(current_user.current_tenant_id, "website", provider)
+        # cdg: 根据提供商类型，调用不同的爬取方法。
         if provider == "firecrawl":
             # decrypt api_key
             api_key = encrypter.decrypt_token(
@@ -99,6 +103,7 @@ class WebsiteService:
         else:
             raise ValueError("Invalid provider")
 
+    # cdg: 获取爬取状态。
     @classmethod
     def get_crawl_status(cls, job_id: str, provider: str) -> dict:
         credentials = ApiKeyAuthService.get_auth_credentials(current_user.current_tenant_id, "website", provider)
@@ -164,6 +169,7 @@ class WebsiteService:
             raise ValueError("Invalid provider")
         return crawl_status_data
 
+    # cdg: 获取爬取数据。
     @classmethod
     def get_crawl_url_data(cls, job_id: str, provider: str, url: str, tenant_id: str) -> dict[Any, Any] | None:
         credentials = ApiKeyAuthService.get_auth_credentials(tenant_id, "website", provider)
@@ -221,6 +227,7 @@ class WebsiteService:
         else:
             raise ValueError("Invalid provider")
 
+    # cdg: 获取网站数据。
     @classmethod
     def get_scrape_url_data(cls, provider: str, url: str, tenant_id: str, only_main_content: bool) -> dict:
         credentials = ApiKeyAuthService.get_auth_credentials(tenant_id, "website", provider)
