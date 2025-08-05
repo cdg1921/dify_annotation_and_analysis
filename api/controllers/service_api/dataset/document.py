@@ -147,6 +147,45 @@ class DocumentUpdateByTextApi(DatasetApiResource):
         return documents_and_batch_fields, 200
 
 
+# cdg: 文档添加功能，通过接口上传文件，并添加到向量库中。调用代码示例如下：
+"""
+import requests
+import json
+
+dataset_id = 'a14bae24-b152-4e9c-8e74-4345df096ae6'
+url = f'http://172.168.8.194/v1/datasets/{dataset_id}/document/create_by_file'
+headers = {
+    'Authorization': 'Bearer dataset-MoE37nUXBrqK33DBeWeliLvJ',
+}
+
+data = {
+    "indexing_technique": "high_quality",
+    "process_rule": {
+        "rules": {
+            "pre_processing_rules": [
+                {"id": "remove_extra_spaces", "enabled": True},
+                {"id": "remove_urls_emails", "enabled": True}
+            ],
+            "segmentation": {
+                "separator": "###",
+                "max_tokens": 500
+            }
+        },
+        "mode": "custom"
+    }
+}
+
+# 注意：data字段需要以字符串形式上传，并且指定type为text/plain
+multipart_form_data = {
+    'data': (None, json.dumps(data), 'text/plain'),
+    'file': open('D:\\project\\课题3.docx', 'rb')
+}
+
+response = requests.post(url, headers=headers, files=multipart_form_data)
+
+print(response.status_code)
+print(response.text)
+"""
 class DocumentAddByFileApi(DatasetApiResource):
     """Resource for documents."""
 

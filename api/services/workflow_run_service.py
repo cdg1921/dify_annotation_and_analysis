@@ -48,6 +48,7 @@ class WorkflowRunService:
         pagination.data = with_message_workflow_runs
         return pagination
 
+    # cdg: 分页查询调试工作流运行。
     def get_paginate_workflow_runs(self, app_model: App, args: dict) -> InfiniteScrollPagination:
         """
         Get debug workflow run list
@@ -96,6 +97,7 @@ class WorkflowRunService:
 
         return InfiniteScrollPagination(data=workflow_runs, limit=limit, has_more=has_more)
 
+    # cdg: 获取工作流运行详情。
     def get_workflow_run(self, app_model: App, run_id: str) -> Optional[WorkflowRun]:
         """
         Get workflow run detail
@@ -115,6 +117,7 @@ class WorkflowRunService:
 
         return workflow_run
 
+    # cdg: 获取工作流运行节点执行情况。
     def get_workflow_run_node_executions(self, app_model: App, run_id: str) -> list[WorkflowNodeExecution]:
         """
         Get workflow run node execution list

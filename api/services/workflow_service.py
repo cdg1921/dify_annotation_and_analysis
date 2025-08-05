@@ -35,12 +35,14 @@ from models.workflow import (
 from services.errors.app import WorkflowHashNotEqualError
 from services.workflow.workflow_converter import WorkflowConverter
 
-
+# cdg: 工作流服务，主要功能包括获取草稿工作流、获取发布工作流、获取所有发布工作流、同步草稿工作流、发布工作流、获取默认块配置、获取默认块配置、运行草稿工作流节点、转换为工作流应用、验证功能结构。
+# cdg: WorkflowService类是工作流管理的重要入口
 class WorkflowService:
     """
     Workflow Service
     """
 
+    # cdg: 获取草稿状态的工作流。
     def get_draft_workflow(self, app_model: App) -> Optional[Workflow]:
         """
         Get draft workflow
@@ -57,6 +59,7 @@ class WorkflowService:
         # return draft workflow
         return workflow
 
+    # cdg: 获取已经发布的工作流。
     def get_published_workflow(self, app_model: App) -> Optional[Workflow]:
         """
         Get published workflow
@@ -78,6 +81,7 @@ class WorkflowService:
 
         return workflow
 
+    # cdg: 获取所有发布的工作流。
     def get_all_published_workflow(self, app_model: App, page: int, limit: int) -> tuple[list[Workflow], bool]:
         """
         Get published workflow with pagination
@@ -100,6 +104,7 @@ class WorkflowService:
 
         return workflows, has_more
 
+    # cdg: 同步草稿工作流。
     def sync_draft_workflow(
         self,
         *,
@@ -121,6 +126,7 @@ class WorkflowService:
         if workflow and workflow.unique_hash != unique_hash:
             raise WorkflowHashNotEqualError()
 
+        # cdg: 验证功能结构。
         # validate features structure
         self.validate_features_structure(app_model=app_model, features=features)
 
@@ -156,6 +162,7 @@ class WorkflowService:
         # return draft workflow
         return workflow
 
+    # cdg: 发布工作流，将草稿状态的工作流信息构建为发布状态的工作流，保存到数据库中，并触发工作流事件。
     def publish_workflow(self, app_model: App, account: Account, draft_workflow: Optional[Workflow] = None) -> Workflow:
         """
         Publish workflow from draft
@@ -192,12 +199,14 @@ class WorkflowService:
         app_model.workflow_id = workflow.id
         db.session.commit()
 
+        # cdg: 触发工作流事件。
         # trigger app workflow events
         app_published_workflow_was_updated.send(app_model, published_workflow=workflow)
 
         # return new workflow
         return workflow
 
+    # cdg: 获取默认块配置，返回所有节点的默认配置。
     def get_default_block_configs(self) -> list[dict]:
         """
         Get default block configs
@@ -212,6 +221,7 @@ class WorkflowService:
 
         return default_block_configs
 
+    # cdg: 获取默认块配置，返回指定节点的默认配置。
     def get_default_block_config(self, node_type: str, filters: Optional[dict] = None) -> Optional[dict]:
         """
         Get default config of node.
@@ -232,6 +242,9 @@ class WorkflowService:
 
         return default_config
 
+    # cdg: 运行草稿工作流节点。具体实现方式如下：
+    # 首先，它通过get_draft_workflow方法获取当前应用的草稿流程，如果未初始化则抛出异常。
+    # 然后，调用WorkflowEntry.single_step_run方法以单步方式运行指定节点，传入节点ID、用户输入和用户ID，并获取节点实例和事件生成器。遍历生成器，捕获运行完成事件，处理输出文件。若节点运行失败且允许出错继续，会根据节点的错误策略（如默认值）构造相应的输出。整个过程中会捕获节点运行失败的异常，并记录错误信息。最后，函数会创建并填充一个 WorkflowNodeExecution 实例，记录本次节点执行的相关信息（如输入、输出、耗时、状态等），并将其返回。
     def run_draft_workflow_node(
         self, app_model: App, node_id: str, user_inputs: dict, account: Account
     ) -> WorkflowNodeExecution:
@@ -347,6 +360,7 @@ class WorkflowService:
 
         return workflow_node_execution
 
+    # cdg: 将高级对话应用转换为工作流应用。
     def convert_to_workflow(self, app_model: App, account: Account, args: dict) -> App:
         """
         Basic mode of chatbot app(expert mode) to workflow
@@ -375,6 +389,7 @@ class WorkflowService:
 
         return new_app
 
+    # cdg: 验证功能结构。
     def validate_features_structure(self, app_model: App, features: dict) -> dict:
         if app_model.mode == AppMode.ADVANCED_CHAT.value:
             return AdvancedChatAppConfigManager.config_validate(

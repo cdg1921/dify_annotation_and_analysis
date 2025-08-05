@@ -31,6 +31,7 @@ from Crypto.Util.py3compat import _copy_bytes, bord
 from Crypto.Util.strxor import strxor
 
 
+# cdg: 用于实现PKCS#1 OAEP加密和解密算法。
 class PKCS1OAepCipher:
     """Cipher object for PKCS#1 v1.5 OAEP.
     Do not create directly: use :func:`new` instead."""
@@ -81,12 +82,14 @@ class PKCS1OAepCipher:
         .. deprecated:: 3.0"""
         return self._key.can_encrypt()
 
+    # cdg: 检查是否可以解密
     def can_decrypt(self):
         """Legacy function to check if you can call :meth:`decrypt`.
 
         .. deprecated:: 3.0"""
         return self._key.can_decrypt()
 
+    # cdg: 加密消息
     def encrypt(self, message):
         """Encrypt a message with PKCS#1 OAEP.
 
@@ -141,6 +144,7 @@ class PKCS1OAepCipher:
         c = long_to_bytes(m_int, k)
         return c
 
+    # cdg: 解密消息
     def decrypt(self, ciphertext):
         """Decrypt a message with PKCS#1 OAEP.
 
@@ -202,7 +206,7 @@ class PKCS1OAepCipher:
         # Step 4
         return db[one_pos + 1 :]
 
-
+# cdg: 创建PKCS#1 OAEP加密和解密对象。
 def new(key, hashAlgo=None, mgfunc=None, label=b"", randfunc=None):
     """Return a cipher object :class:`PKCS1OAEP_Cipher`
      that can be used to perform PKCS#1 OAEP encryption or decryption.
