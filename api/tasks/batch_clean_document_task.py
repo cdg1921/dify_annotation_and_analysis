@@ -11,7 +11,7 @@ from extensions.ext_storage import storage
 from models.dataset import Dataset, DocumentSegment
 from models.model import UploadFile
 
-
+# cdg: 异步清空文档数据。通过@shared_task装饰器，将batch_clean_document_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def batch_clean_document_task(document_ids: list[str], dataset_id: str, doc_form: str, file_ids: list[str]):
     """
@@ -27,18 +27,25 @@ def batch_clean_document_task(document_ids: list[str], dataset_id: str, doc_form
     start_at = time.perf_counter()
 
     try:
+        # cdg: 根据知识库ID获取知识库。
         dataset = db.session.query(Dataset).filter(Dataset.id == dataset_id).first()
 
+        # cdg: 如果知识库不存在，则抛出异常。
         if not dataset:
             raise Exception("Document has no dataset")
 
+        # cdg: 根据文档ID获取文档的所有分段。
         segments = db.session.query(DocumentSegment).filter(DocumentSegment.document_id.in_(document_ids)).all()
         # check segment is exist
         if segments:
+            # cdg: 获取所有分段的索引节点ID。
             index_node_ids = [segment.index_node_id for segment in segments]
+            # cdg: 初始化索引处理器。
             index_processor = IndexProcessorFactory(doc_form).init_index_processor()
+            # cdg: 清空知识库中所有文档数据。
             index_processor.clean(dataset, index_node_ids, with_keywords=True, delete_child_chunks=True)
 
+            # cdg: 清空文档文件。
             for segment in segments:
                 image_upload_file_ids = get_image_upload_file_ids(segment.content)
                 for upload_file_id in image_upload_file_ids:
@@ -55,6 +62,8 @@ def batch_clean_document_task(document_ids: list[str], dataset_id: str, doc_form
                 db.session.delete(segment)
 
             db.session.commit()
+
+        # cdg: 进一步清空文件管理系统中的文档文件。
         if file_ids:
             files = db.session.query(UploadFile).filter(UploadFile.id.in_(file_ids)).all()
             for file in files:
@@ -65,6 +74,7 @@ def batch_clean_document_task(document_ids: list[str], dataset_id: str, doc_form
                 db.session.delete(file)
             db.session.commit()
 
+        # cdg: 计算清空文档数据的时间，并记录日志。
         end_at = time.perf_counter()
         logging.info(
             click.style(

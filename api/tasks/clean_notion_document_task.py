@@ -8,7 +8,7 @@ from core.rag.index_processor.index_processor_factory import IndexProcessorFacto
 from extensions.ext_database import db
 from models.dataset import Dataset, Document, DocumentSegment
 
-
+# cdg: 异步清空Notion文档。通过@shared_task装饰器，将clean_notion_document_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def clean_notion_document_task(document_ids: list[str], dataset_id: str):
     """

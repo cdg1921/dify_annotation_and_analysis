@@ -11,7 +11,7 @@ from extensions.ext_database import db
 from models.dataset import Dataset, DocumentSegment
 from models.dataset import Document as DatasetDocument
 
-
+# cdg: 异步处理知识库的向量索引。通过@shared_task装饰器，将deal_dataset_vector_index_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def deal_dataset_vector_index_task(dataset_id: str, action: str):
     """
@@ -24,15 +24,22 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
     start_at = time.perf_counter()
 
     try:
+        # cdg: 根据知识库ID获取知识库。
         dataset = Dataset.query.filter_by(id=dataset_id).first()
-
+        # cdg: 如果知识库不存在，则抛出异常。
         if not dataset:
             raise Exception("Dataset not found")
+
+        # cdg: 获取知识库的索引类型。
         index_type = dataset.doc_form or IndexType.PARAGRAPH_INDEX
+        # cdg: 初始化索引处理器。
         index_processor = IndexProcessorFactory(index_type).init_index_processor()
+
+        # cdg: 如果操作类型为删除，则清空知识库中的所有文档。
         if action == "remove":
             index_processor.clean(dataset, None, with_keywords=False)
-        elif action == "add":
+        elif action == "add":  # cdg: 如果操作类型为添加，则添加知识库中的所有文档。
+            # cdg: 获取知识库中的所有文档。
             dataset_documents = (
                 db.session.query(DatasetDocument)
                 .filter(
@@ -43,16 +50,19 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                 )
                 .all()
             )
-
+            # cdg: 如果文档存在，则更新文档的索引状态。
             if dataset_documents:
+                # cdg: 获取文档的ID。
                 dataset_documents_ids = [doc.id for doc in dataset_documents]
                 db.session.query(DatasetDocument).filter(DatasetDocument.id.in_(dataset_documents_ids)).update(
                     {"indexing_status": "indexing"}, synchronize_session=False
                 )
                 db.session.commit()
 
+                # cdg: 遍历文档。
                 for dataset_document in dataset_documents:
                     try:
+                        # cdg: 获取文档中的所有分段。   
                         # add from vector index
                         segments = (
                             db.session.query(DocumentSegment)
@@ -60,8 +70,10 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                             .order_by(DocumentSegment.position.asc())
                             .all()
                         )
+                        # cdg: 如果分段存在，则构建Segment对象。
                         if segments:
                             documents = []
+                            # cdg: 遍历分段。   
                             for segment in segments:
                                 document = Document(
                                     page_content=segment.content,
@@ -72,10 +84,12 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                                         "dataset_id": segment.dataset_id,
                                     },
                                 )
-
+                                # cdg: 将segment对象添加到列表中。
                                 documents.append(document)
                             # save vector index
+                            # cdg: 将文档添加到向量库中。
                             index_processor.load(dataset, documents, with_keywords=False)
+                        # cdg: 更新文档的索引状态。
                         db.session.query(DatasetDocument).filter(DatasetDocument.id == dataset_document.id).update(
                             {"indexing_status": "completed"}, synchronize_session=False
                         )
@@ -85,7 +99,8 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                             {"indexing_status": "error", "error": str(e)}, synchronize_session=False
                         )
                         db.session.commit()
-        elif action == "update":
+        elif action == "update": # cdg: 如果操作类型为更新，则更新知识库中的所有文档。
+            # cdg: 获取知识库中的所有文档。
             dataset_documents = (
                 db.session.query(DatasetDocument)
                 .filter(
@@ -96,18 +111,20 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                 )
                 .all()
             )
+            # cdg: 如果文档存在，则更新文档的索引状态。
             # add new index
             if dataset_documents:
-                # update document status
+                # cdg: 获取文档的ID。
                 dataset_documents_ids = [doc.id for doc in dataset_documents]
                 db.session.query(DatasetDocument).filter(DatasetDocument.id.in_(dataset_documents_ids)).update(
                     {"indexing_status": "indexing"}, synchronize_session=False
                 )
                 db.session.commit()
 
-                # clean index
+                # cdg: 清空知识库中的所有文档。
                 index_processor.clean(dataset, None, with_keywords=False, delete_child_chunks=False)
 
+                # cdg: 遍历文档。
                 for dataset_document in dataset_documents:
                     # update from vector index
                     try:
@@ -157,7 +174,7 @@ def deal_dataset_vector_index_task(dataset_id: str, action: str):
                             {"indexing_status": "error", "error": str(e)}, synchronize_session=False
                         )
                         db.session.commit()
-            else:
+            else: # cdg: 其他情况，则清空知识库中的所有文档。
                 # clean collection
                 index_processor.clean(dataset, None, with_keywords=False, delete_child_chunks=False)
 

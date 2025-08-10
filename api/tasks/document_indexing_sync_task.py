@@ -13,7 +13,7 @@ from extensions.ext_database import db
 from models.dataset import Dataset, Document, DocumentSegment
 from models.source import DataSourceOauthBinding
 
-
+# cdg: 异步更新文档索引。通过@shared_task装饰器，将document_indexing_sync_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def document_indexing_sync_task(dataset_id: str, document_id: str):
     """
@@ -26,13 +26,17 @@ def document_indexing_sync_task(dataset_id: str, document_id: str):
     logging.info(click.style("Start sync document: {}".format(document_id), fg="green"))
     start_at = time.perf_counter()
 
+    # cdg: 根据文档ID和知识库ID获取文档。
     document = db.session.query(Document).filter(Document.id == document_id, Document.dataset_id == dataset_id).first()
-
+    # cdg: 如果文档不存在，则抛出异常。
     if not document:
         raise NotFound("Document not found")
 
+    # cdg: 获取文档的数据源信息。
     data_source_info = document.data_source_info_dict
+    # cdg: 如果文档的数据源类型为Notion导入，则获取Notion的页面ID、工作区ID、页面类型和最后编辑时间。
     if document.data_source_type == "notion_import":
+        # cdg: 如果数据源信息不存在、notion_page_id不存在、notion_workspace_id不存在或type不存在，则抛出异常。
         if (
             not data_source_info
             or "notion_page_id" not in data_source_info
@@ -64,6 +68,7 @@ def document_indexing_sync_task(dataset_id: str, document_id: str):
 
         last_edited_time = loader.get_notion_last_edited_time()
 
+        # cdg: 如果最后编辑时间与页面最后编辑时间不一致，则更新文档的索引状态。
         # check the page is updated
         if last_edited_time != page_edited_time:
             document.indexing_status = "parsing"

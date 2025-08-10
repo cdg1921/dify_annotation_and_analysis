@@ -13,15 +13,21 @@ logger = logging.getLogger(__name__)
 # cdg: 这里引用celery的@shared_task装饰器，将任务添加到celery的dataset队列中，实现异步执行。
 @shared_task(queue="dataset")
 def delete_account_task(account_id):
+    # cdg: 根据账户ID获取账户。
     account = db.session.query(Account).filter(Account.id == account_id).first()
+    # cdg: 如果账户不存在，则抛出异常。
     try:
+        # cdg: 删除账户。
         BillingService.delete_account(account_id)
     except Exception as e:
+        # cdg: 如果删除账户失败，则记录日志。
         logger.exception(f"Failed to delete account {account_id} from billing service.")
         raise
 
     if not account:
         logger.error(f"Account {account_id} not found.")
         return
+
+    # cdg: 发送删除账户成功邮件。
     # send success email
     send_deletion_success_task.delay(account.email)

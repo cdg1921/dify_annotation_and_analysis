@@ -18,7 +18,7 @@ from models.dataset import (
 )
 from models.model import UploadFile
 
-
+# cdg: 异步清空知识库。通过@shared_task装饰器，将clean_dataset_task函数注册为Celery任务，并指定任务队列为dataset。
 # Add import statement for ValueError
 @shared_task(queue="dataset")
 def clean_dataset_task(
@@ -44,6 +44,7 @@ def clean_dataset_task(
     start_at = time.perf_counter()
 
     try:
+        # cdg: 根据知识库ID获取知识库。
         dataset = Dataset(
             id=dataset_id,
             tenant_id=tenant_id,
@@ -51,29 +52,40 @@ def clean_dataset_task(
             index_struct=index_struct,
             collection_binding_id=collection_binding_id,
         )
+        # cdg: 根据知识库ID获取知识库中的所有文档。
         documents = db.session.query(Document).filter(Document.dataset_id == dataset_id).all()
+        # cdg: 根据知识库ID获取知识库中的所有文本分段。
         segments = db.session.query(DocumentSegment).filter(DocumentSegment.dataset_id == dataset_id).all()
 
+        # cdg: 如果知识库中没有文档，则记录日志。
         if documents is None or len(documents) == 0:
             logging.info(click.style("No documents found for dataset: {}".format(dataset_id), fg="green"))
         else:
             logging.info(click.style("Cleaning documents for dataset: {}".format(dataset_id), fg="green"))
+            # cdg: 初始化索引处理器前，需要先指定索引类型。
             # Specify the index type before initializing the index processor
             if doc_form is None:
                 raise ValueError("Index type must be specified.")
+            # cdg: 初始化索引处理器。
             index_processor = IndexProcessorFactory(doc_form).init_index_processor()
+            # cdg: 清空知识库中的所有文档。
             index_processor.clean(dataset, None, with_keywords=True, delete_child_chunks=True)
 
+            # cdg: 遍历知识库中的所有文档。
             for document in documents:
                 db.session.delete(document)
 
+            # cdg: 遍历知识库中的所有文本分段。
             for segment in segments:
+                # cdg: 获取文本分段中的所有图片文件ID。
                 image_upload_file_ids = get_image_upload_file_ids(segment.content)
                 for upload_file_id in image_upload_file_ids:
                     image_file = db.session.query(UploadFile).filter(UploadFile.id == upload_file_id).first()
+                    # cdg: 如果图片文件不存在，则跳过。
                     if image_file is None:
                         continue
                     try:
+                        # cdg: 删除图片文件。
                         storage.delete(image_file.key)
                     except Exception:
                         logging.exception(
@@ -83,10 +95,14 @@ def clean_dataset_task(
                     db.session.delete(image_file)
                 db.session.delete(segment)
 
+        # cdg: 删除知识库中的所有处理规则。
         db.session.query(DatasetProcessRule).filter(DatasetProcessRule.dataset_id == dataset_id).delete()
+        # cdg: 删除知识库中的所有查询。
         db.session.query(DatasetQuery).filter(DatasetQuery.dataset_id == dataset_id).delete()
+        # cdg: 删除知识库中的所有应用关联。
         db.session.query(AppDatasetJoin).filter(AppDatasetJoin.dataset_id == dataset_id).delete()
 
+        # cdg: 删除本地文件系统中与知识库相关的所有文件。
         # delete files
         if documents:
             for document in documents:

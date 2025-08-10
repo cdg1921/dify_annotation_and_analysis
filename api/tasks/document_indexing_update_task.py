@@ -11,7 +11,7 @@ from core.rag.index_processor.index_processor_factory import IndexProcessorFacto
 from extensions.ext_database import db
 from models.dataset import Dataset, Document, DocumentSegment
 
-
+# cdg: 异步更新文档索引。通过@shared_task装饰器，将document_indexing_update_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def document_indexing_update_task(dataset_id: str, document_id: str):
     """
@@ -24,6 +24,7 @@ def document_indexing_update_task(dataset_id: str, document_id: str):
     logging.info(click.style("Start update document: {}".format(document_id), fg="green"))
     start_at = time.perf_counter()
 
+    # cdg: 根据文档ID和知识库ID获取文档。
     document = db.session.query(Document).filter(Document.id == document_id, Document.dataset_id == dataset_id).first()
 
     if not document:

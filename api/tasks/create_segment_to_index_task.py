@@ -13,7 +13,7 @@ from extensions.ext_database import db
 from extensions.ext_redis import redis_client
 from models.dataset import DocumentSegment
 
-
+# cdg: 异步添加文本块到向量库中。通过@shared_task装饰器，将create_segment_to_index_task函数注册为Celery任务，并指定任务队列为dataset。
 @shared_task(queue="dataset")
 def create_segment_to_index_task(segment_id: str, keywords: Optional[list[str]] = None):
     """
@@ -25,16 +25,22 @@ def create_segment_to_index_task(segment_id: str, keywords: Optional[list[str]] 
     logging.info(click.style("Start create segment to index: {}".format(segment_id), fg="green"))
     start_at = time.perf_counter()
 
+    # cdg: 根据文本块ID获取文本块。
     segment = db.session.query(DocumentSegment).filter(DocumentSegment.id == segment_id).first()
+    # cdg: 如果文本块不存在，则抛出异常。
     if not segment:
         raise NotFound("Segment not found")
 
+    # cdg: 如果文本块的状态不是等待中，则返回。
     if segment.status != "waiting":
         return
 
+    # cdg: 构建文本块的索引缓存键。
     indexing_cache_key = "segment_{}_indexing".format(segment.id)
 
+    # cdg: 更新文本块的状态为索引中。
     try:
+        # cdg: 更新文本块的状态为索引中。
         # update segment status to indexing
         update_params = {
             DocumentSegment.status: "indexing",
@@ -68,10 +74,15 @@ def create_segment_to_index_task(segment_id: str, keywords: Optional[list[str]] 
             logging.info(click.style("Segment {} document status is invalid, pass.".format(segment.id), fg="cyan"))
             return
 
+        # cdg: 获取知识库的索引类型。
         index_type = dataset.doc_form
+        # cdg: 初始化索引处理器。
         index_processor = IndexProcessorFactory(index_type).init_index_processor()
+
+        # cdg: 将文本块添加到向量库中。
         index_processor.load(dataset, [document])
 
+        # cdg: 更新文本块的状态为已完成。   
         # update segment to completed
         update_params = {
             DocumentSegment.status: "completed",
