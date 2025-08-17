@@ -7,7 +7,7 @@ from flask import render_template
 
 from extensions.ext_mail import mail
 
-
+# cdg: 异步发送重置密码邮件。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"mail"。
 @shared_task(queue="mail")
 def send_reset_password_mail_task(language: str, to: str, code: str):
     """

@@ -12,7 +12,7 @@ from models.dataset import Dataset, ExternalKnowledgeApis
 from models.model import UploadFile
 from services.external_knowledge_service import ExternalDatasetService
 
-
+# cdg: 异步处理外部文档索引。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"dataset"。
 @shared_task(queue="dataset")
 def external_document_indexing_task(
     dataset_id: str, external_knowledge_api_id: str, data_source: dict, process_parameter: dict
@@ -26,14 +26,14 @@ def external_document_indexing_task(
     Usage: external_document_indexing_task.delay(dataset_id, document_id)
     """
     start_at = time.perf_counter()
-
+    # cdg: 根据知识库ID获取知识库。如果知识库不存在，则直接返回。
     dataset = db.session.query(Dataset).filter(Dataset.id == dataset_id).first()
     if not dataset:
         logging.info(
             click.style("Processed external dataset: {} failed, dataset not exit.".format(dataset_id), fg="red")
         )
         return
-
+    # cdg: 根据外部API ID获取外部知识库文档模板
     # get external api template
     external_knowledge_api = (
         db.session.query(ExternalKnowledgeApis)
@@ -42,7 +42,7 @@ def external_document_indexing_task(
         )
         .first()
     )
-
+    # cdg: 如果外部知识库文档模板不存在，则直接返回。
     if not external_knowledge_api:
         logging.info(
             click.style(
@@ -53,7 +53,9 @@ def external_document_indexing_task(
             )
         )
         return
+    # cdg: 创建文件字典。
     files = {}
+    # cdg: 如果数据源类型为上传文件，则获取上传文件列表。
     if data_source["type"] == "upload_file":
         upload_file_list = data_source["info_list"]["file_info_list"]["file_ids"]
         for file_id in upload_file_list:
@@ -65,14 +67,18 @@ def external_document_indexing_task(
             if file:
                 files[file.id] = (file.name, storage.load_once(file.key), file.mime_type)
     try:
+        # cdg: 获取外部知识库API设置。
         settings = ExternalDatasetService.get_external_knowledge_api_settings(
             json.loads(external_knowledge_api.settings)
         )
 
+        # cdg: 处理外部API。
         # do http request
         response = ExternalDatasetService.process_external_api(settings, files)
+        # cdg: 获取任务ID。
         job_id = response.json().get("job_id")
         if job_id:
+            # cdg: 保存任务ID到知识库。
             # save job_id to dataset
             dataset.job_id = job_id
             db.session.commit()

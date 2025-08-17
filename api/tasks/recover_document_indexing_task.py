@@ -9,7 +9,7 @@ from core.indexing_runner import DocumentIsPausedError, IndexingRunner
 from extensions.ext_database import db
 from models.dataset import Document
 
-
+# cdg: 异步恢复文档索引。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"dataset"。
 @shared_task(queue="dataset")
 def recover_document_indexing_task(dataset_id: str, document_id: str):
     """
@@ -22,6 +22,7 @@ def recover_document_indexing_task(dataset_id: str, document_id: str):
     logging.info(click.style("Recover document: {}".format(document_id), fg="green"))
     start_at = time.perf_counter()
 
+    # cdg: 根据文档ID和知识库ID获取文档。如果文档不存在，则报错。
     document = db.session.query(Document).filter(Document.id == document_id, Document.dataset_id == dataset_id).first()
 
     if not document:

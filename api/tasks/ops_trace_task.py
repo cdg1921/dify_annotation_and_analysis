@@ -29,21 +29,31 @@ def process_trace_tasks(file_info):
     file_data = json.loads(storage.load(file_path))
     trace_info = file_data.get("trace_info")
     trace_info_type = file_data.get("trace_info_type")
+
+    # cdg: 获取操作跟踪实例。
     trace_instance = OpsTraceManager.get_ops_trace_instance(app_id)
 
+    # cdg: 如果消息数据存在，则从字典转换为消息对象。
     if trace_info.get("message_data"):
         trace_info["message_data"] = Message.from_dict(data=trace_info["message_data"])
+    # cdg: 如果工作流数据存在，则从字典转换为工作流运行对象。
     if trace_info.get("workflow_data"):
         trace_info["workflow_data"] = WorkflowRun.from_dict(data=trace_info["workflow_data"])
+    # cdg: 如果文档数据存在，则从字典转换为文档对象列表。
     if trace_info.get("documents"):
         trace_info["documents"] = [Document(**doc) for doc in trace_info["documents"]]
 
+    # cdg: 尝试处理操作跟踪。
     try:
+        # cdg: 如果操作跟踪实例存在，则处理操作跟踪。
         if trace_instance:
             with current_app.app_context():
+                # cdg: 根据操作跟踪类型获取操作跟踪类型实例。
                 trace_type = trace_info_info_map.get(trace_info_type)
                 if trace_type:
+                    # cdg: 根据操作跟踪类型实例化操作跟踪对象。
                     trace_info = trace_type(**trace_info)
+                # cdg: 处理操作跟踪。
                 trace_instance.trace(trace_info)
         logging.info(f"Processing trace tasks success, app_id: {app_id}")
     except Exception:
@@ -51,4 +61,5 @@ def process_trace_tasks(file_info):
         redis_client.incr(failed_key)
         logging.info(f"Processing trace tasks failed, app_id: {app_id}")
     finally:
+        # cdg: 删除操作跟踪文件。
         storage.delete(file_path)

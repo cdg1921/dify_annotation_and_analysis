@@ -8,7 +8,7 @@ from flask import render_template
 from configs import dify_config
 from extensions.ext_mail import mail
 
-
+# cdg: 异步发送邀请成员邮件。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"mail"。
 @shared_task(queue="mail")
 def send_invite_member_mail_task(language: str, to: str, token: str, inviter_name: str, workspace_name: str):
     """

@@ -7,7 +7,7 @@ from flask import render_template
 
 from extensions.ext_mail import mail
 
-
+# cdg: 异步发送账户删除成功邮件。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"mail"。
 @shared_task(queue="mail")
 def send_deletion_success_task(to):
     """Send email to user regarding account deletion.
@@ -17,18 +17,20 @@ def send_deletion_success_task(to):
     """
     if not mail.is_inited():
         return
-
+    # cdg: 记录发送账户删除成功邮件的开始时间。
     logging.info(click.style(f"Start send account deletion success email to {to}", fg="green"))
     start_at = time.perf_counter()
-
+    # cdg: 尝试发送账户删除成功邮件。
     try:
+        # cdg: 渲染账户删除成功邮件模板。
         html_content = render_template(
             "delete_account_success_template_en-US.html",
             to=to,
             email=to,
         )
+        # cdg: 发送账户删除成功邮件。
         mail.send(to=to, subject="Your Dify.AI Account Has Been Successfully Deleted", html=html_content)
-
+        # cdg: 记录发送账户删除成功邮件的时间。
         end_at = time.perf_counter()
         logging.info(
             click.style(
@@ -38,7 +40,7 @@ def send_deletion_success_task(to):
     except Exception:
         logging.exception("Send account deletion success email to {} failed".format(to))
 
-
+# cdg: 异步发送账户删除验证码邮件。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"mail"。
 @shared_task(queue="mail")
 def send_account_deletion_verification_code(to, code):
     """Send email to user regarding account deletion verification code.

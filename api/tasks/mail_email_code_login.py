@@ -7,7 +7,7 @@ from flask import render_template
 
 from extensions.ext_mail import mail
 
-
+# cdg: 异步发送邮箱验证码登录邮件。使用@shared_task装饰器将函数标记为Celery任务，并指定任务队列为"mail"。
 @shared_task(queue="mail")
 def send_email_code_login_mail_task(language: str, to: str, code: str):
     """
