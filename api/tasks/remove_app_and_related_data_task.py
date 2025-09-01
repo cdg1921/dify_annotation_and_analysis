@@ -77,21 +77,26 @@ def remove_app_and_related_data_task(self, tenant_id: str, app_id: str):
         _delete_conversation_variables(app_id=app_id)
 
         end_at = time.perf_counter()
+        # cdg: 记录删除应用和相关数据的时间,click.style用于美化日志输出,fg="green"表示绿色
         logging.info(click.style(f"App and related data deleted: {app_id} latency: {end_at - start_at}", fg="green"))
     except SQLAlchemyError as e:
         logging.exception(
             click.style(f"Database error occurred while deleting app {app_id} and related data", fg="red")
         )
+        # cdg: 如果数据库错误,重试60秒
         raise self.retry(exc=e, countdown=60)  # Retry after 60 seconds
     except Exception as e:
         logging.exception(click.style(f"Error occurred while deleting app {app_id} and related data", fg="red"))
+        # cdg: 如果其他错误,重试60秒
         raise self.retry(exc=e, countdown=60)  # Retry after 60 seconds
 
 
 def _delete_app_model_configs(tenant_id: str, app_id: str):
+    # cdg: 删除应用模型配置
     def del_model_config(model_config_id: str):
         db.session.query(AppModelConfig).filter(AppModelConfig.id == model_config_id).delete(synchronize_session=False)
 
+    # cdg: 删除数据库中的app_model_configs表中的数据,1000条记录为一批次
     _delete_records(
         """select id from app_model_configs where app_id=:app_id limit 1000""",
         {"app_id": app_id},
@@ -100,6 +105,7 @@ def _delete_app_model_configs(tenant_id: str, app_id: str):
     )
 
 
+# cdg: 删除应用站点
 def _delete_app_site(tenant_id: str, app_id: str):
     def del_site(site_id: str):
         db.session.query(Site).filter(Site.id == site_id).delete(synchronize_session=False)
@@ -327,19 +333,25 @@ def _delete_trace_app_configs(tenant_id: str, app_id: str):
         "trace app config",
     )
 
-
+# cdg: 删除数据库中的数据,1000条记录为一批次
 def _delete_records(query_sql: str, params: dict, delete_func: Callable, name: str) -> None:
     while True:
+        # cdg: 使用db.engine.begin()作为上下文管理器,避免手动提交事务
         with db.engine.begin() as conn:
+            # cdg: 执行查询语句,获取查询结果
             rs = conn.execute(db.text(query_sql), params)
+            # cdg: 如果查询结果为0,则退出循环
             if rs.rowcount == 0:
                 break
 
+            # cdg: 遍历查询结果,删除每条记录
             for i in rs:
                 record_id = str(i.id)
                 try:
+                    # cdg: 调用删除函数,删除每条记录
                     delete_func(record_id)
                     db.session.commit()
+                    # cdg: 记录删除记录的时间
                     logging.info(click.style(f"Deleted {name} {record_id}", fg="green"))
                 except Exception:
                     logging.exception(f"Error occurred while deleting {name} {record_id}")

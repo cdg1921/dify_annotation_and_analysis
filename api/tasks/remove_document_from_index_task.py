@@ -11,7 +11,7 @@ from extensions.ext_database import db
 from extensions.ext_redis import redis_client
 from models.dataset import Document, DocumentSegment
 
-
+# cdg: 用于异步删除文档索引. celery -A celery_app.celery_app.celery worker -Q dataset -n worker1@%h
 @shared_task(queue="dataset")
 def remove_document_from_index_task(document_id: str):
     """
@@ -29,7 +29,7 @@ def remove_document_from_index_task(document_id: str):
 
     if document.indexing_status != "completed":
         return
-
+    # cdg: 拼接文档的索引缓存键
     indexing_cache_key = "document_{}_indexing".format(document.id)
 
     try:
@@ -37,17 +37,20 @@ def remove_document_from_index_task(document_id: str):
 
         if not dataset:
             raise Exception("Document has no dataset")
-
+        # cdg: 初始化索引处理器
         index_processor = IndexProcessorFactory(document.doc_form).init_index_processor()
-
+        # cdg: 获取文档片段
         segments = db.session.query(DocumentSegment).filter(DocumentSegment.document_id == document.id).all()
+        # cdg: 获取文档片段的索引节点ID
         index_node_ids = [segment.index_node_id for segment in segments]
         if index_node_ids:
             try:
+                # cdg: 清理文档片段的索引
                 index_processor.clean(dataset, index_node_ids, with_keywords=True, delete_child_chunks=False)
             except Exception:
                 logging.exception(f"clean dataset {dataset.id} from index failed")
         # update segment to disable
+        # cdg: 禁用文档片段
         db.session.query(DocumentSegment).filter(DocumentSegment.document_id == document.id).update(
             {
                 DocumentSegment.enabled: False,
@@ -70,4 +73,5 @@ def remove_document_from_index_task(document_id: str):
             document.enabled = True
             db.session.commit()
     finally:
+        # cdg: 删除文档的索引缓存
         redis_client.delete(indexing_cache_key)
