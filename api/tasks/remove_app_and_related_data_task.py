@@ -32,30 +32,48 @@ from models.tools import WorkflowToolProvider
 from models.web import PinnedConversation, SavedMessage
 from models.workflow import ConversationVariable, Workflow, WorkflowAppLog, WorkflowNodeExecution, WorkflowRun
 
-
+# cdg: 用于异步删除应用和相关数据. celery -A celery_app.celery_app.celery worker -Q app_deletion -n worker1@%h
 @shared_task(queue="app_deletion", bind=True, max_retries=3)
 def remove_app_and_related_data_task(self, tenant_id: str, app_id: str):
     logging.info(click.style(f"Start deleting app and related data: {tenant_id}:{app_id}", fg="green"))
     start_at = time.perf_counter()
     try:
         # Delete related data
+        # cdg: 删除应用模型配置 1000条记录为一批次
         _delete_app_model_configs(tenant_id, app_id)
+        # cdg: 删除应用站点
         _delete_app_site(tenant_id, app_id)
+        # cdg: 删除应用API令牌
         _delete_app_api_tokens(tenant_id, app_id)
+        # cdg: 删除已安装应用
         _delete_installed_apps(tenant_id, app_id)
+        # cdg: 删除推荐应用
         _delete_recommended_apps(tenant_id, app_id)
+        # cdg: 删除应用标注数据
         _delete_app_annotation_data(tenant_id, app_id)
+        # cdg: 删除应用数据集关联
         _delete_app_dataset_joins(tenant_id, app_id)
+        # cdg: 删除应用工作流
         _delete_app_workflows(tenant_id, app_id)
+        # cdg: 删除应用工作流运行
         _delete_app_workflow_runs(tenant_id, app_id)
+        # cdg: 删除应用工作流节点执行
         _delete_app_workflow_node_executions(tenant_id, app_id)
+        # cdg: 删除应用工作流应用日志
         _delete_app_workflow_app_logs(tenant_id, app_id)
+        # cdg: 删除应用对话
         _delete_app_conversations(tenant_id, app_id)
+        # cdg: 删除应用消息
         _delete_app_messages(tenant_id, app_id)
+        # cdg: 删除应用工作流工具提供者
         _delete_workflow_tool_providers(tenant_id, app_id)
+        # cdg: 删除应用标签绑定
         _delete_app_tag_bindings(tenant_id, app_id)
+        # cdg: 删除应用终端用户
         _delete_end_users(tenant_id, app_id)
+        # cdg: 删除应用跟踪配置
         _delete_trace_app_configs(tenant_id, app_id)
+        # cdg: 删除应用对话变量
         _delete_conversation_variables(app_id=app_id)
 
         end_at = time.perf_counter()
