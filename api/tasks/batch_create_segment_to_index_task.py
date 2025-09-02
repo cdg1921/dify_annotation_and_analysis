@@ -30,6 +30,7 @@ def batch_create_segment_to_index_task(
     :param tenant_id:
     :param user_id:
 
+    # cdg: 使用示例：batch_create_segment_to_index_task.delay(segment_id)
     Usage: batch_create_segment_to_index_task.delay(segment_id)
     """
     logging.info(click.style("Start batch create segment jobId: {}".format(job_id), fg="green"))
@@ -50,7 +51,7 @@ def batch_create_segment_to_index_task(
         if not dataset_document:
             raise ValueError("Document not exist.")
 
-        # cdg: 如果文档不可用，则抛出异常。
+        # cdg: 如果文档被禁用、归档或索引状态不为已完成，则抛出异常。
         if not dataset_document.enabled or dataset_document.archived or dataset_document.indexing_status != "completed":
             raise ValueError("Document is not available.")
         

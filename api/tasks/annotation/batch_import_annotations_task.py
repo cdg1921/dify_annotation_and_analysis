@@ -13,7 +13,7 @@ from models.dataset import Dataset
 from models.model import App, AppAnnotationSetting, MessageAnnotation
 from services.dataset_service import DatasetCollectionBindingService
 
-
+# cdg: 用于异步批量导入注释到索引. 用法：celery -A celery_app.celery_app.celery worker -Q dataset -n worker1@%h
 @shared_task(queue="dataset")
 def batch_import_annotations_task(job_id: str, content_list: list[dict], app_id: str, tenant_id: str, user_id: str):
     """
@@ -27,20 +27,26 @@ def batch_import_annotations_task(job_id: str, content_list: list[dict], app_id:
     """
     logging.info(click.style("Start batch import annotation: {}".format(job_id), fg="green"))
     start_at = time.perf_counter()
+    # cdg: 拼接索引缓存键
     indexing_cache_key = "app_annotation_batch_import_{}".format(str(job_id))
+    # cdg: 获取应用信息
     # get app info
     app = db.session.query(App).filter(App.id == app_id, App.tenant_id == tenant_id, App.status == "normal").first()
 
     if app:
         try:
+            # cdg: 初始化文档列表
             documents = []
             for content in content_list:
+                # cdg: 创建注释
                 annotation = MessageAnnotation(
                     app_id=app.id, content=content["answer"], question=content["question"], account_id=user_id
                 )
+                # cdg: 添加注释
                 db.session.add(annotation)
                 db.session.flush()
 
+                # cdg: 创建文档
                 document = Document(
                     page_content=content["question"],
                     metadata={"annotation_id": annotation.id, "app_id": app_id, "doc_id": annotation.id},
@@ -50,7 +56,7 @@ def batch_import_annotations_task(job_id: str, content_list: list[dict], app_id:
             app_annotation_setting = (
                 db.session.query(AppAnnotationSetting).filter(AppAnnotationSetting.app_id == app_id).first()
             )
-
+            # cdg: 获取数据集集合绑定
             if app_annotation_setting:
                 dataset_collection_binding = (
                     DatasetCollectionBindingService.get_dataset_collection_binding_by_id_and_type(
@@ -67,10 +73,10 @@ def batch_import_annotations_task(job_id: str, content_list: list[dict], app_id:
                     embedding_model=dataset_collection_binding.model_name,
                     collection_binding_id=dataset_collection_binding.id,
                 )
-
+                # cdg: 创建向量索引工具
                 vector = Vector(dataset, attributes=["doc_id", "annotation_id", "app_id"])
                 vector.create(documents, duplicate_check=True)
-
+                # cdg: 提交事务
             db.session.commit()
             redis_client.setex(indexing_cache_key, 600, "completed")
             end_at = time.perf_counter()

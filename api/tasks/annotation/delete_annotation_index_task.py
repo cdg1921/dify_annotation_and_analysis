@@ -8,7 +8,7 @@ from core.rag.datasource.vdb.vector_factory import Vector
 from models.dataset import Dataset
 from services.dataset_service import DatasetCollectionBindingService
 
-
+# cdg: 用于异步删除注释索引. 用法：celery -A celery_app.celery_app.celery worker -Q dataset -n worker1@%h
 @shared_task(queue="dataset")
 def delete_annotation_index_task(annotation_id: str, app_id: str, tenant_id: str, collection_binding_id: str):
     """
@@ -29,10 +29,13 @@ def delete_annotation_index_task(annotation_id: str, app_id: str, tenant_id: str
         )
 
         try:
+            # cdg: 创建向量索引工具
             vector = Vector(dataset, attributes=["doc_id", "annotation_id", "app_id"])
+            # cdg: 删除注释索引
             vector.delete_by_metadata_field("annotation_id", annotation_id)
         except Exception:
             logging.exception("Delete annotation index failed when annotation deleted.")
+        # cdg: 计算执行时间
         end_at = time.perf_counter()
         logging.info(
             click.style("App annotations index deleted : {} latency: {}".format(app_id, end_at - start_at), fg="green")

@@ -9,7 +9,7 @@ from core.rag.models.document import Document
 from models.dataset import Dataset
 from services.dataset_service import DatasetCollectionBindingService
 
-
+# cdg: 用于异步更新注释索引. 用法：celery -A celery_app.celery_app.celery worker -Q dataset -n worker1@%h
 @shared_task(queue="dataset")
 def update_annotation_to_index_task(
     annotation_id: str, question: str, tenant_id: str, app_id: str, collection_binding_id: str
@@ -28,10 +28,11 @@ def update_annotation_to_index_task(
     start_at = time.perf_counter()
 
     try:
+        # cdg: 获取数据集集合绑定
         dataset_collection_binding = DatasetCollectionBindingService.get_dataset_collection_binding_by_id_and_type(
             collection_binding_id, "annotation"
         )
-
+        # cdg: 创建数据集
         dataset = Dataset(
             id=app_id,
             tenant_id=tenant_id,
@@ -40,13 +41,17 @@ def update_annotation_to_index_task(
             embedding_model=dataset_collection_binding.model_name,
             collection_binding_id=dataset_collection_binding.id,
         )
-
+        # cdg: 创建文档
         document = Document(
             page_content=question, metadata={"annotation_id": annotation_id, "app_id": app_id, "doc_id": annotation_id}
         )
+        # cdg: 创建向量索引工具
         vector = Vector(dataset, attributes=["doc_id", "annotation_id", "app_id"])
+        # cdg: 删除注释索引
         vector.delete_by_metadata_field("annotation_id", annotation_id)
+        # cdg: 创建向量索引
         vector.add_texts([document])
+        # cdg: 计算执行时间
         end_at = time.perf_counter()
         logging.info(
             click.style(
