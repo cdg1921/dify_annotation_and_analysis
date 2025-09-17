@@ -37,7 +37,7 @@ class ParentChildIndexProcessor(BaseIndexProcessor):
             raise ValueError("No rules found in process rule.")
         rules = Rule(**process_rule.get("rules"))
         all_documents = []  # type: ignore
-        if rules.parent_mode == ParentMode.PARAGRAPH:
+        if rules.parent_mode == ParentMode.PARAGRAPH: # cdg:如果父模式为段落
             # Split the text documents into nodes.
             splitter = self._get_splitter(
                 processing_rule_mode=process_rule.get("mode"),
@@ -47,34 +47,41 @@ class ParentChildIndexProcessor(BaseIndexProcessor):
                 embedding_model_instance=kwargs.get("embedding_model_instance"),
             )
             for document in documents:
+                # cdg:全文清洗
                 # document clean
                 document_text = CleanProcessor.clean(document.page_content, process_rule)
                 document.page_content = document_text
+
+                # cdg:文本段切分
                 # parse document to nodes
                 document_nodes = splitter.split_documents([document])
                 split_documents = []
-                for document_node in document_nodes:
-                    if document_node.page_content.strip():
-                        doc_id = str(uuid.uuid4())
-                        hash = helper.generate_text_hash(document_node.page_content)
+                for document_node in document_nodes:  # cdg:对于每个文本段，进行以下操作
+                    if document_node.page_content.strip():  # cdg:如果文本段不为空
+                        doc_id = str(uuid.uuid4())  # cdg:生成一个唯一的id
+                        hash = helper.generate_text_hash(document_node.page_content)  # cdg:生成一个唯一的hash
                         document_node.metadata["doc_id"] = doc_id
                         document_node.metadata["doc_hash"] = hash
                         # delete Splitter character
+                        # cdg:删除文本段的开头和结尾的标点符号
                         page_content = document_node.page_content
                         if page_content.startswith(".") or page_content.startswith("。"):
                             page_content = page_content[1:].strip()
                         else:
                             page_content = page_content
-                        if len(page_content) > 0:
+                        if len(page_content) > 0:  # cdg:如果文本段不为空
                             document_node.page_content = page_content
                             # parse document to child nodes
+                            # cdg:文本段切分为多个子文本段
                             child_nodes = self._split_child_nodes(
                                 document_node, rules, process_rule.get("mode"), kwargs.get("embedding_model_instance")
                             )
+                            # cdg:将子文本段添加到文本段中
                             document_node.children = child_nodes
+                            # cdg:将子文本段添加到文本段中
                             split_documents.append(document_node)
                 all_documents.extend(split_documents)
-        elif rules.parent_mode == ParentMode.FULL_DOC:
+        elif rules.parent_mode == ParentMode.FULL_DOC: # cdg:如果父模式为全文
             page_content = "\n".join([document.page_content for document in documents])
             document = Document(page_content=page_content, metadata=documents[0].metadata)
             # parse document to child nodes
@@ -145,6 +152,7 @@ class ParentChildIndexProcessor(BaseIndexProcessor):
         reranking_model: dict,
     ) -> list[Document]:
         # Set search parameters.
+        # cdg:根据child_chunk进行检索，返回的是page_content
         results = RetrievalService.retrieve(
             retrieval_method=retrieval_method,
             dataset_id=dataset.id,
@@ -159,6 +167,7 @@ class ParentChildIndexProcessor(BaseIndexProcessor):
             metadata = result.metadata
             metadata["score"] = result.score
             if result.score > score_threshold:
+                # cdg:返回的是page_content
                 doc = Document(page_content=result.page_content, metadata=metadata)
                 docs.append(doc)
         return docs
