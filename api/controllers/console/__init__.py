@@ -25,18 +25,22 @@ from .explore.workflow import (
 from .files import FileApi, FilePreviewApi, FileSupportTypeApi
 from .remote_files import RemoteFileInfoApi, RemoteFileUploadApi
 
+# cdg:创建蓝图，用于处理console的请求。蓝图是Flask中的一个概念，其作用是将一个应用程序划分为多个模块，每个模块都有自己的路由、视图函数、模板等。
 bp = Blueprint("console", __name__, url_prefix="/console/api")
 api = ExternalApi(bp)
 
+# cdg:文件相关接口路由，包括上传文件、预览文件、支持的文件类型查询等。
 # File
 api.add_resource(FileApi, "/files/upload")
 api.add_resource(FilePreviewApi, "/files/<uuid:file_id>/preview")
 api.add_resource(FileSupportTypeApi, "/files/support-type")
 
+# cdg:远程文件相关接口路由，包括获取远程文件信息、上传远程文件等。
 # Remote files
 api.add_resource(RemoteFileInfoApi, "/remote-files/<path:url>")
 api.add_resource(RemoteFileUploadApi, "/remote-files/upload")
 
+# cdg:应用相关接口路由，包括导入应用、确认导入应用等。
 # Import App
 api.add_resource(AppImportApi, "/apps/imports")
 api.add_resource(AppImportConfirmApi, "/apps/imports/<string:import_id>/confirm")

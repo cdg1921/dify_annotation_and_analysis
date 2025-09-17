@@ -8,14 +8,14 @@ def init_app(app: DifyApp):
     from flask_cors import CORS  # type: ignore
     # cdg: CORS是一种浏览器的安全机制，用于允许或限制不同源（域名、协议、端口）之间的资源请求。
     # 默认情况下，浏览器出于安全考虑，禁止网页从一个域去请求另一个域的资源（即“同源策略”）。
-    # CORS 允许服务器通过设置 HTTP 响应头，明确告诉浏览器哪些跨域请求是被允许的。
+    # CORS 允许服务器通过设置HTTP响应头，明确告诉浏览器哪些跨域请求是被允许的。
 
-    # cdg: 导入蓝图Blueprint（蓝图）是 Flask 提供的一种组件化管理路由和功能的机制。
+    # cdg: 导入蓝图Blueprint（蓝图）是Flask提供的一种组件化管理路由和功能的机制。
     # 它允许你将应用拆分为多个模块，每个模块可以有自己的路由、视图、静态文件等，最后统一注册到主应用上。
     
-    # cdg:CORS 解决前端与后端跨域访问的问题，通过设置响应头允许特定的跨域请求。
-    # 蓝图是 Flask 的模块化机制，用于组织和管理大型项目的路由和功能。
-    # 在实际项目中，常常会为不同的蓝图配置不同的 CORS 策略，以满足不同模块的安全和访问需求。
+    # cdg:CORS解决前端与后端跨域访问的问题，通过设置响应头允许特定的跨域请求。
+    # 蓝图是Flask的模块化机制，用于组织和管理大型项目的路由和功能。
+    # 在实际项目中，常常会为不同的蓝图配置不同的CORS策略，以满足不同模块的安全和访问需求。
     from controllers.console import bp as console_app_bp
     from controllers.files import bp as files_bp
     # cdg: 导入内部API蓝图
