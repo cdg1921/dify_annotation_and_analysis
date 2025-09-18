@@ -95,73 +95,93 @@ from .explore import (
     saved_message,
 )
 
+# cdg:探索音频相关接口路由，包括音频转文本、文本转音频等。
 # Explore Audio
 api.add_resource(ChatAudioApi, "/installed-apps/<uuid:installed_app_id>/audio-to-text", endpoint="installed_app_audio")
 api.add_resource(ChatTextApi, "/installed-apps/<uuid:installed_app_id>/text-to-audio", endpoint="installed_app_text")
 
+# cdg:探索补全相关接口路由，包括补全消息、停止补全等。
 # Explore Completion
+# cdg:补全消息
 api.add_resource(
     CompletionApi, "/installed-apps/<uuid:installed_app_id>/completion-messages", endpoint="installed_app_completion"
 )
+# cdg:停止补全
 api.add_resource(
     CompletionStopApi,
     "/installed-apps/<uuid:installed_app_id>/completion-messages/<string:task_id>/stop",
     endpoint="installed_app_stop_completion",
 )
+# cdg:对话
 api.add_resource(
     ChatApi, "/installed-apps/<uuid:installed_app_id>/chat-messages", endpoint="installed_app_chat_completion"
 )
+# cdg:对话停止
 api.add_resource(
     ChatStopApi,
     "/installed-apps/<uuid:installed_app_id>/chat-messages/<string:task_id>/stop",
     endpoint="installed_app_stop_chat_completion",
 )
 
-# Explore Conversation
+# cdg:探索对话相关接口路由，包括对话重命名、对话列表、对话、对话置顶、对话取消置顶等。
+# Explore 
+# cdg:对话重命名
 api.add_resource(
     ConversationRenameApi,
     "/installed-apps/<uuid:installed_app_id>/conversations/<uuid:c_id>/name",
     endpoint="installed_app_conversation_rename",
 )
+# cdg:对话列表
 api.add_resource(
     ConversationListApi, "/installed-apps/<uuid:installed_app_id>/conversations", endpoint="installed_app_conversations"
 )
+# cdg:对话
 api.add_resource(
     ConversationApi,
     "/installed-apps/<uuid:installed_app_id>/conversations/<uuid:c_id>",
     endpoint="installed_app_conversation",
 )
+# cdg:对话置顶
 api.add_resource(
     ConversationPinApi,
     "/installed-apps/<uuid:installed_app_id>/conversations/<uuid:c_id>/pin",
     endpoint="installed_app_conversation_pin",
 )
+# cdg:对话取消置顶
 api.add_resource(
     ConversationUnPinApi,
     "/installed-apps/<uuid:installed_app_id>/conversations/<uuid:c_id>/unpin",
     endpoint="installed_app_conversation_unpin",
 )
 
-
+# cdg:探索消息相关接口路由，包括消息列表、消息反馈、消息更多类似、消息相似问题等。
 # Explore Message
+# cdg:消息列表
 api.add_resource(MessageListApi, "/installed-apps/<uuid:installed_app_id>/messages", endpoint="installed_app_messages")
+# cdg:消息反馈
 api.add_resource(
     MessageFeedbackApi,
     "/installed-apps/<uuid:installed_app_id>/messages/<uuid:message_id>/feedbacks",
     endpoint="installed_app_message_feedback",
 )
+# cdg:更多类似消息
 api.add_resource(
     MessageMoreLikeThisApi,
     "/installed-apps/<uuid:installed_app_id>/messages/<uuid:message_id>/more-like-this",
     endpoint="installed_app_more_like_this",
 )
+# cdg:消息相似问题推荐
 api.add_resource(
     MessageSuggestedQuestionApi,
     "/installed-apps/<uuid:installed_app_id>/messages/<uuid:message_id>/suggested-questions",
     endpoint="installed_app_suggested_question",
 )
+
+# cdg:探索工作流相关接口路由，包括工作流运行、工作流任务停止等。    
 # Explore Workflow
+# cdg:工作流运行
 api.add_resource(InstalledAppWorkflowRunApi, "/installed-apps/<uuid:installed_app_id>/workflows/run")
+# cdg:工作流任务停止
 api.add_resource(
     InstalledAppWorkflowTaskStopApi, "/installed-apps/<uuid:installed_app_id>/workflows/tasks/<string:task_id>/stop"
 )
