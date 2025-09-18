@@ -14,6 +14,7 @@ from models.model import ApiToken, App
 from . import api
 from .wraps import account_initialization_required, setup_required
 
+# cdg:API密钥字段，常与marshal_with装饰器一起使用，保证返回的API密钥字段符合预期。
 api_key_fields = {
     "id": fields.String,
     "type": fields.String,
@@ -22,6 +23,7 @@ api_key_fields = {
     "created_at": TimestampField,
 }
 
+# cdg:API密钥列表字段
 api_key_list = {"data": fields.List(fields.Nested(api_key_fields), attribute="items")}
 
 
@@ -33,7 +35,7 @@ def _get_resource(resource_id, tenant_id, resource_model):
 
     return resource
 
-
+# cdg:获取API密钥列表资源
 class BaseApiKeyListResource(Resource):
     method_decorators = [account_initialization_required, login_required, setup_required]
 
@@ -43,6 +45,7 @@ class BaseApiKeyListResource(Resource):
     token_prefix: str | None = None
     max_keys = 10
 
+    # cdg:获取API密钥列表，通过marshal_with装饰器，保证返回的API密钥列表字段与api_key_list字段一致。
     @marshal_with(api_key_list)
     def get(self, resource_id):
         assert self.resource_id_field is not None, "resource_id_field must be set"
@@ -55,6 +58,7 @@ class BaseApiKeyListResource(Resource):
         )
         return {"items": keys}
 
+    # cdg:创建API密钥，通过marshal_with装饰器，保证返回的API密钥字段与api_key_fields字段一致。
     @marshal_with(api_key_fields)
     def post(self, resource_id):
         assert self.resource_id_field is not None, "resource_id_field must be set"
@@ -69,6 +73,7 @@ class BaseApiKeyListResource(Resource):
             .count()
         )
 
+        # cdg:如果当前API密钥数量大于等于最大API密钥数量，则抛出异常。
         if current_key_count >= self.max_keys:
             flask_restful.abort(
                 400,
@@ -76,6 +81,7 @@ class BaseApiKeyListResource(Resource):
                 code="max_keys_exceeded",
             )
 
+        # cdg:生成API密钥。
         key = ApiToken.generate_api_key(self.token_prefix, 24)
         api_token = ApiToken()
         setattr(api_token, self.resource_id_field, resource_id)
@@ -86,14 +92,16 @@ class BaseApiKeyListResource(Resource):
         db.session.commit()
         return api_token, 201
 
-
+# cdg:API密钥资源
 class BaseApiKeyResource(Resource):
+    # cdg:API密钥资源所支持的装饰器
     method_decorators = [account_initialization_required, login_required, setup_required]
 
     resource_type: str | None = None
     resource_model: Any = None
     resource_id_field: str | None = None
 
+    # cdg:删除API密钥
     def delete(self, resource_id, api_key_id):
         assert self.resource_id_field is not None, "resource_id_field must be set"
         resource_id = str(resource_id)
@@ -122,7 +130,7 @@ class BaseApiKeyResource(Resource):
 
         return {"result": "success"}, 204
 
-
+# cdg:应用API密钥列表资源
 class AppApiKeyListResource(BaseApiKeyListResource):
     def after_request(self, resp):
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -134,7 +142,7 @@ class AppApiKeyListResource(BaseApiKeyListResource):
     resource_id_field = "app_id"
     token_prefix = "app-"
 
-
+# cdg:应用API密钥资源
 class AppApiKeyResource(BaseApiKeyResource):
     def after_request(self, resp):
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -145,7 +153,7 @@ class AppApiKeyResource(BaseApiKeyResource):
     resource_model = App
     resource_id_field = "app_id"
 
-
+# cdg:知识库API密钥列表资源
 class DatasetApiKeyListResource(BaseApiKeyListResource):
     def after_request(self, resp):
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -157,7 +165,7 @@ class DatasetApiKeyListResource(BaseApiKeyListResource):
     resource_id_field = "dataset_id"
     token_prefix = "ds-"
 
-
+# cdg:知识库API密钥资源
 class DatasetApiKeyResource(BaseApiKeyResource):
     def after_request(self, resp):
         resp.headers["Access-Control-Allow-Origin"] = "*"
@@ -168,8 +176,11 @@ class DatasetApiKeyResource(BaseApiKeyResource):
     resource_model = Dataset
     resource_id_field = "dataset_id"
 
-
+# cdg:根据应用ID获取API密钥列表资源
 api.add_resource(AppApiKeyListResource, "/apps/<uuid:resource_id>/api-keys")
+# cdg:根据应用ID获取API密钥资源
 api.add_resource(AppApiKeyResource, "/apps/<uuid:resource_id>/api-keys/<uuid:api_key_id>")
+# cdg:根据知识库ID获取API密钥列表资源
 api.add_resource(DatasetApiKeyListResource, "/datasets/<uuid:resource_id>/api-keys")
+# cdg:根据知识库ID获取API密钥资源
 api.add_resource(DatasetApiKeyResource, "/datasets/<uuid:resource_id>/api-keys/<uuid:api_key_id>")

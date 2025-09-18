@@ -10,7 +10,7 @@ from models.api_based_extension import APIBasedExtension
 from services.api_based_extension_service import APIBasedExtensionService
 from services.code_based_extension_service import CodeBasedExtensionService
 
-
+# cdg:代码扩展API
 class CodeBasedExtensionAPI(Resource):
     @setup_required
     @login_required
