@@ -11,7 +11,7 @@ from libs.login import login_required
 from models import ConversationVariable
 from models.model import AppMode
 
-
+# cdg:定义ConversationVariablesApi，用于获取对话变量
 class ConversationVariablesApi(Resource):
     @setup_required
     @login_required
