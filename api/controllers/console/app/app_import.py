@@ -15,7 +15,7 @@ from libs.login import login_required
 from models import Account
 from services.app_dsl_service import AppDslService, ImportStatus
 
-
+# cdg:导入应用，导入DSL功能接口
 class AppImportApi(Resource):
     @setup_required
     @login_required
@@ -25,7 +25,7 @@ class AppImportApi(Resource):
         # Check user role first
         if not current_user.is_editor:
             raise Forbidden()
-
+        # cdg:解析请求参数
         parser = reqparse.RequestParser()
         parser.add_argument("mode", type=str, required=True, location="json")
         parser.add_argument("yaml_content", type=str, location="json")
@@ -37,7 +37,7 @@ class AppImportApi(Resource):
         parser.add_argument("icon_background", type=str, location="json")
         parser.add_argument("app_id", type=str, location="json")
         args = parser.parse_args()
-
+        # cdg:创建应用DSL服务
         # Create service with session
         with Session(db.engine) as session:
             import_service = AppDslService(session)
@@ -65,7 +65,7 @@ class AppImportApi(Resource):
             return result.model_dump(mode="json"), 202
         return result.model_dump(mode="json"), 200
 
-
+# cdg:确认导入应用，确认导入DSL功能接口
 class AppImportConfirmApi(Resource):
     @setup_required
     @login_required
@@ -78,9 +78,11 @@ class AppImportConfirmApi(Resource):
 
         # Create service with session
         with Session(db.engine) as session:
+            # cdg:创建应用DSL服务
             import_service = AppDslService(session)
             # Confirm import
             account = cast(Account, current_user)
+            # cdg:确认导入应用
             result = import_service.confirm_import(import_id=import_id, account=account)
             session.commit()
 

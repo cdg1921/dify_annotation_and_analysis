@@ -1,6 +1,6 @@
 import json
 import os
-from functools import wraps
+from functools import wraps # cdg:导入wraps装饰器，用于装饰视图函数，使其具有装饰器的功能。
 
 from flask import abort, request
 from flask_login import current_user  # type: ignore
@@ -13,13 +13,14 @@ from services.operation_service import OperationService
 
 from .error import NotInitValidateError, NotSetupError, UnauthorizedAndForceLogout
 
-
+# cdg:检查账户初始化装饰器,常用于检查账户初始化
 def account_initialization_required(view):
     @wraps(view)
     def decorated(*args, **kwargs):
         # check account initialization
+        # cdg:获取当前用户
         account = current_user
-
+        # cdg:如果用户状态为未初始化，则抛出异常
         if account.status == "uninitialized":
             raise AccountNotInitializedError()
 
@@ -27,7 +28,7 @@ def account_initialization_required(view):
 
     return decorated
 
-
+# cdg:检查云版装饰器,常用于检查云版
 def only_edition_cloud(view):
     @wraps(view)
     def decorated(*args, **kwargs):
@@ -38,7 +39,7 @@ def only_edition_cloud(view):
 
     return decorated
 
-
+# cdg:检查自托管装饰器,常用于检查自托管
 def only_edition_self_hosted(view):
     @wraps(view)
     def decorated(*args, **kwargs):
@@ -49,7 +50,7 @@ def only_edition_self_hosted(view):
 
     return decorated
 
-
+# cdg:检查知识库计费限制装饰器,常用于检查知识库计费限制
 def cloud_edition_billing_resource_check(resource: str):
     def interceptor(view):
         @wraps(view)
@@ -88,7 +89,7 @@ def cloud_edition_billing_resource_check(resource: str):
 
     return interceptor
 
-
+# cdg:检查知识库计费限制装饰器,常用于检查知识库计费限制
 def cloud_edition_billing_knowledge_limit_check(resource: str):
     def interceptor(view):
         @wraps(view)
@@ -110,16 +111,19 @@ def cloud_edition_billing_knowledge_limit_check(resource: str):
 
     return interceptor
 
-
+# cdg:检查UTM记录装饰器,常用于检查UTM记录是否存在
 def cloud_utm_record(view):
     @wraps(view)
     def decorated(*args, **kwargs):
         try:
+            # cdg:获取服务特性
             features = FeatureService.get_features(current_user.current_tenant_id)
 
+            # cdg:如果计费功能启用，则记录UTM记录
             if features.billing.enabled:
                 utm_info = request.cookies.get("utm_info")
 
+                # cdg:如果UTM记录存在，则记录UTM记录
                 if utm_info:
                     utm_info_dict: dict = json.loads(utm_info)
                     OperationService.record_utm(current_user.current_tenant_id, utm_info_dict)
@@ -129,13 +133,15 @@ def cloud_utm_record(view):
 
     return decorated
 
-
+# cdg:检查设置装饰器,常用于检查设置是否初始化
 def setup_required(view):
     @wraps(view)
     def decorated(*args, **kwargs):
         # check setup
+        # cdg:如果设置为自托管，并且初始密码存在，并且设置不存在，则抛出异常
         if dify_config.EDITION == "SELF_HOSTED" and os.environ.get("INIT_PASSWORD") and not DifySetup.query.first():
             raise NotInitValidateError()
+        # cdg:如果设置为自托管，并且设置不存在，则抛出异常
         elif dify_config.EDITION == "SELF_HOSTED" and not DifySetup.query.first():
             raise NotSetupError()
 
@@ -144,6 +150,7 @@ def setup_required(view):
     return decorated
 
 
+# cdg:检查企业许可证装饰器,常用于检查企业许可证是否有效
 def enterprise_license_required(view):
     @wraps(view)
     def decorated(*args, **kwargs):

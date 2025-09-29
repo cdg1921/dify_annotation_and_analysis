@@ -19,7 +19,7 @@ from fields.annotation_fields import (
 from libs.login import login_required
 from services.annotation_service import AppAnnotationService
 
-
+# cdg: 开启/关闭自动标注
 class AnnotationReplyActionApi(Resource):
     @setup_required
     @login_required
@@ -43,7 +43,7 @@ class AnnotationReplyActionApi(Resource):
             raise ValueError("Unsupported annotation reply action")
         return result, 200
 
-
+# cdg:获取应用标注设置详情
 class AppAnnotationSettingDetailApi(Resource):
     @setup_required
     @login_required
@@ -56,7 +56,7 @@ class AppAnnotationSettingDetailApi(Resource):
         result = AppAnnotationService.get_app_annotation_setting_by_app_id(app_id)
         return result, 200
 
-
+# cdg:更新应用标注设置
 class AppAnnotationSettingUpdateApi(Resource):
     @setup_required
     @login_required
@@ -75,7 +75,7 @@ class AppAnnotationSettingUpdateApi(Resource):
         result = AppAnnotationService.update_app_annotation_setting(app_id, annotation_setting_id, args)
         return result, 200
 
-
+# cdg:获取应用标注设置状态
 class AnnotationReplyActionStatusApi(Resource):
     @setup_required
     @login_required
@@ -99,7 +99,7 @@ class AnnotationReplyActionStatusApi(Resource):
 
         return {"job_id": job_id, "job_status": job_status, "error_msg": error_msg}, 200
 
-
+# cdg:获取应用标注列表
 class AnnotationListApi(Resource):
     @setup_required
     @login_required
@@ -123,7 +123,7 @@ class AnnotationListApi(Resource):
         }
         return response, 200
 
-
+# cdg:导出应用标注列表
 class AnnotationExportApi(Resource):
     @setup_required
     @login_required
@@ -137,7 +137,7 @@ class AnnotationExportApi(Resource):
         response = {"data": marshal(annotation_list, annotation_fields)}
         return response, 200
 
-
+# cdg:创建应用标注
 class AnnotationCreateApi(Resource):
     @setup_required
     @login_required
@@ -156,7 +156,7 @@ class AnnotationCreateApi(Resource):
         annotation = AppAnnotationService.insert_app_annotation_directly(args, app_id)
         return annotation
 
-
+# cdg:更新/删除应用标注
 class AnnotationUpdateDeleteApi(Resource):
     @setup_required
     @login_required
@@ -188,7 +188,7 @@ class AnnotationUpdateDeleteApi(Resource):
         AppAnnotationService.delete_app_annotation(app_id, annotation_id)
         return {"result": "success"}, 200
 
-
+# cdg:批量导入应用标注
 class AnnotationBatchImportApi(Resource):
     @setup_required
     @login_required
@@ -212,7 +212,7 @@ class AnnotationBatchImportApi(Resource):
             raise ValueError("Invalid file type. Only CSV files are allowed")
         return AppAnnotationService.batch_import_app_annotations(app_id, file)
 
-
+# cdg:获取批量导入应用标注状态
 class AnnotationBatchImportStatusApi(Resource):
     @setup_required
     @login_required
@@ -235,7 +235,7 @@ class AnnotationBatchImportStatusApi(Resource):
 
         return {"job_id": job_id, "job_status": job_status, "error_msg": error_msg}, 200
 
-
+# cdg:获取应用标注命中历史列表
 class AnnotationHitHistoryListApi(Resource):
     @setup_required
     @login_required
