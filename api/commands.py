@@ -26,7 +26,7 @@ from models.model import Account, App, AppAnnotationSetting, AppMode, Conversati
 from models.provider import Provider, ProviderModel
 from services.account_service import RegisterService, TenantService
 
-# cdg:
+# cdg: 重设用户密码，使用方式：python commands.py reset-password --email <email> --new-password <new_password> --password-confirm <password_confirm>
 @click.command("reset-password", help="Reset the account password.")
 @click.option("--email", prompt=True, help="Account email to reset password for")
 @click.option("--new-password", prompt=True, help="New password")
@@ -64,7 +64,7 @@ def reset_password(email, new_password, password_confirm):
     db.session.commit()
     click.echo(click.style("Password reset successfully.", fg="green"))
 
-
+# cdg: 重置用户邮箱，使用方式：python commands.py reset-email --email <email> --new-email <new_email> --email-confirm <email_confirm>
 @click.command("reset-email", help="Reset the account email.")
 @click.option("--email", prompt=True, help="Current account email")
 @click.option("--new-email", prompt=True, help="New email")
@@ -95,6 +95,7 @@ def reset_email(email, new_email, email_confirm):
     click.echo(click.style("Email updated successfully.", fg="green"))
 
 
+# cdg: 重置工作空间加密密钥对，使用方式：python commands.py reset-encrypt-key-pair --confirm
 @click.command(
     "reset-encrypt-key-pair",
     help="Reset the asymmetric key pair of workspace for encrypt LLM credentials. "
@@ -414,6 +415,7 @@ def migrate_knowledge_vector_database():
     )
 
 
+# cdg: 转换为Agent应用，使用方式：python commands.py convert-to-agent-apps
 @click.command("convert-to-agent-apps", help="Convert Agent Assistant to Agent App.")
 def convert_to_agent_apps():
     """
@@ -474,6 +476,7 @@ def convert_to_agent_apps():
     click.echo(click.style("Conversion complete. Converted {} agent apps.".format(len(proceeded_app_ids)), fg="green"))
 
 
+# cdg: 添加Qdrant doc_id索引，使用方式：python commands.py add-qdrant-doc-id-index --field <field>
 @click.command("add-qdrant-doc-id-index", help="Add Qdrant doc_id index.")
 @click.option("--field", default="metadata.doc_id", prompt=False, help="Index field , default is metadata.doc_id.")
 def add_qdrant_doc_id_index(field: str):
