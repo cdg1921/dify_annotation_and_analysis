@@ -22,10 +22,12 @@ class FileInfo(BaseModel):
 def guess_file_info_from_response(response: httpx.Response):
     url = str(response.url)
     # Try to extract filename from URL
+    # cdg: 解析URL，用于提取文件名
     parsed_url = urllib.parse.urlparse(url)
     url_path = parsed_url.path
     filename = os.path.basename(url_path)
 
+    # cdg: 如果文件名无法提取，则使用Content-Disposition头部的文件名
     # If filename couldn't be extracted, use Content-Disposition header
     if not filename:
         content_disposition = response.headers.get("Content-Disposition")
@@ -34,11 +36,13 @@ def guess_file_info_from_response(response: httpx.Response):
             if filename_match:
                 filename = filename_match.group(1)
 
+    # cdg: 如果文件名仍然无法提取，则利用uuid生成一个唯一文件名
     # If still no filename, generate a unique one
     if not filename:
         unique_name = str(uuid4())
         filename = f"{unique_name}"
 
+    # cdg: 猜测MIME类型，先从文件名猜测，如果失败则从URL猜测，如果仍然失败则从响应头部的Content-Type猜测
     # Guess MIME type from filename first, then URL
     mimetype, _ = mimetypes.guess_type(filename)
     if mimetype is None:
@@ -47,13 +51,16 @@ def guess_file_info_from_response(response: httpx.Response):
         # If guessing fails, use Content-Type from response headers
         mimetype = response.headers.get("Content-Type", "application/octet-stream")
 
+    # cdg: 获取文件扩展名，如果无法获取，则使用MIME类型猜测一个扩展名
     extension = os.path.splitext(filename)[1]
 
+    # cdg: 如果文件扩展名无法获取，则使用MIME类型猜测一个扩展名
     # Ensure filename has an extension
     if not extension:
         extension = mimetypes.guess_extension(mimetype) or ".bin"
         filename = f"{filename}{extension}"
 
+    # cdg: 返回文件信息，包括文件名、扩展名、MIME类型、大小
     return FileInfo(
         filename=filename,
         extension=extension,

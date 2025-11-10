@@ -1,5 +1,6 @@
 from flask_restful import fields  # type: ignore
 
+# cdg: 系统参数字段，用于规范化接口返回字段格式，一般和marshal_with装饰器配合使用
 parameters__system_parameters = {
     "image_file_size_limit": fields.Integer,
     "video_file_size_limit": fields.Integer,
