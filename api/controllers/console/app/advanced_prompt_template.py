@@ -5,7 +5,7 @@ from controllers.console.wraps import account_initialization_required, setup_req
 from libs.login import login_required
 from services.advanced_prompt_template_service import AdvancedPromptTemplateService
 
-
+# cdg:获取高级提示模板列表接口，用于获取高级提示模板列表
 class AdvancedPromptTemplateList(Resource):
     @setup_required
     @login_required
@@ -20,5 +20,5 @@ class AdvancedPromptTemplateList(Resource):
 
         return AdvancedPromptTemplateService.get_prompt(args)
 
-
+# cdg:添加高级提示模板列表接口到API路由
 api.add_resource(AdvancedPromptTemplateList, "/app/prompt-templates")
